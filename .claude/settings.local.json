@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(where docker-compose *)",
+      "Bash(docker compose *)",
+      "Bash(wsl -l)",
+      "Bash(npm -v)"
+    ]
+  }
+}

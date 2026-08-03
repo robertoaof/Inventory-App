@@ -1,0 +1,255 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: Inter, system-ui, sans-serif;
+  background: #f7f7f8;
+  color: #111;
+}
+
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-header {
+  background: #003e75;
+  color: #fff;
+  padding: 1rem;
+}
+
+.header-content {
+  max-width: 980px;
+  margin: 0 auto;
+}
+
+.tab-nav {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  padding: 1rem;
+  background: #ffffff;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.tab {
+  text-decoration: none;
+  color: #374151;
+  font-weight: 600;
+}
+
+.tab.active {
+  color: #003e75;
+}
+
+.app-main {
+  max-width: 980px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+.page-header,
+.page-content,
+.oleo-list,
+.actions-footer,
+.dialog {
+  margin-bottom: 1rem;
+}
+
+.date-selector label,
+.oleo-card label,
+.oleo-breakdown label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.date-selector input,
+.oleo-card input,
+.oleo-card textarea {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+}
+
+.actions-footer {
+  display: flex;
+  gap: 1rem;
+}
+
+.actions-footer button {
+  padding: 0.75rem 1rem;
+  border: none;
+  border-radius: 0.5rem;
+  background: #003e75;
+  color: white;
+  cursor: pointer;
+}
+
+.actions-footer button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.summary-bar {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.summary-card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.75rem;
+  padding: 1rem;
+}
+
+.oleo-card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.75rem;
+  padding: 1rem;
+}
+
+.oleo-card-header,
+.oleo-card-footer,
+.dialog-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.status-badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.status-correto {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.status-sobra {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.status-falta {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.comparison-bar {
+  margin-top: 1rem;
+}
+
+.comparison-track {
+  position: relative;
+  height: 1rem;
+  background: #e5e7eb;
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.comparison-fill {
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.comparison-fill.fisico {
+  background: rgba(59, 130, 246, 0.8);
+}
+
+.comparison-fill.sistema {
+  background: rgba(16, 185, 129, 0.8);
+}
+
+.comparison-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: #4b5563;
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.oleo-breakdown {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+
+.oleo-total-fisico span {
+  display: block;
+  padding: 0.5rem;
+  font-weight: 700;
+}
+
+.oleo-card-sistema {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.9rem;
+  color: #374151;
+  margin: 0.5rem 0;
+}
+
+.save-status-indicator {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.save-status-salvando {
+  color: #92400e;
+}
+
+.save-status-salvo {
+  color: #065f46;
+}
+
+.save-status-erro {
+  color: #991b1b;
+}
+
+.loading-indicator,
+.error-indicator {
+  margin-bottom: 1rem;
+}
+
+.error-indicator {
+  color: #991b1b;
+}
+
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.dialog {
+  background: white;
+  border-radius: 1rem;
+  padding: 1.5rem;
+  width: min(90%, 420px);
+}
