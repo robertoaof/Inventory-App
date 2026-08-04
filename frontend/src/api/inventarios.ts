@@ -70,6 +70,28 @@ export interface InventarioFechado {
   fechado_em: string;
 }
 
+/** Uma linha da listagem paginada de `GET /inventarios` (histórico, RN25). */
+export interface InventarioResumoDia {
+  data: string;
+  status: StatusInventario;
+  fechado_em: string | null;
+  resumo: ResumoStatus;
+}
+
+export interface InventarioListResponse {
+  total: number;
+  pagina: number;
+  tamanho_pagina: number;
+  resultados: InventarioResumoDia[];
+}
+
+export interface ListarInventariosParams {
+  /** Se omitido, o backend já filtra só `fechado` (RN25) — não envie explicitamente sem necessidade. */
+  status?: "rascunho" | "fechado";
+  pagina?: number;
+  tamanho_pagina?: number;
+}
+
 export interface PatchItemOleoPayload {
   estoque?: number;
   oficina?: number;
@@ -148,6 +170,33 @@ export async function patchItem(
   }
 
   return (await response.json()) as ItemOleoOuGraxa | ItemPeca;
+}
+
+/**
+ * Lista o histórico de inventários (RF20).
+ * GET /api/v1/inventarios — sem `status`, o backend já retorna só os
+ * `fechado` (RN25), do mais recente para o mais antigo.
+ */
+export async function listarInventarios(
+  params: ListarInventariosParams = {}
+): Promise<InventarioListResponse> {
+  const query = new URLSearchParams();
+  if (params.status) query.set("status", params.status);
+  if (params.pagina !== undefined) query.set("pagina", String(params.pagina));
+  if (params.tamanho_pagina !== undefined) {
+    query.set("tamanho_pagina", String(params.tamanho_pagina));
+  }
+
+  const queryString = query.toString();
+  const response = await fetch(
+    `${API_BASE_URL}/api/v1/inventarios${queryString ? `?${queryString}` : ""}`
+  );
+
+  if (!response.ok) {
+    await parseErroOuLancar(response);
+  }
+
+  return (await response.json()) as InventarioListResponse;
 }
 
 /**

@@ -106,6 +106,54 @@ def catalogo_oleos_graxas(db: Session) -> List[Item]:
     )
 
 
+def ranking_sistema_fechado(db: Session, item_ids: List[int]) -> Dict[int, List[Tuple[int, int]]]:
+    """Base da herança RN27, em uma única query: para cada item, os dois
+    inventários fechados mais recentes que têm linha dele, na forma
+    `(inventario_id, quantidade_sistema)` e do mais novo para o mais antigo.
+
+    Dois bastam porque a herança só precisa ignorar *um* inventário (o
+    próprio dia que está sendo montado). Guardar o ranking em vez de só o
+    primeiro valor permite resolver a herança de vários dias de uma vez,
+    sem repetir a consulta por dia (a listagem devolve até 30 dias)."""
+    if not item_ids:
+        return {}
+
+    stmt = (
+        select(
+            InventarioItem.item_id,
+            InventarioItem.inventario_id,
+            InventarioItem.quantidade_sistema,
+        )
+        .join(Inventario, Inventario.id == InventarioItem.inventario_id)
+        .where(Inventario.status == "fechado", InventarioItem.item_id.in_(item_ids))
+        .order_by(Inventario.data.desc())
+    )
+
+    ranking: Dict[int, List[Tuple[int, int]]] = {}
+    for item_id, inventario_id, quantidade_sistema in db.execute(stmt).all():
+        entradas = ranking.setdefault(item_id, [])
+        if len(entradas) < 2:
+            entradas.append((inventario_id, quantidade_sistema))
+    return ranking
+
+
+def heranca_do_ranking(
+    ranking: Dict[int, List[Tuple[int, int]]],
+    excluir_inventario_id: Optional[int] = None,
+) -> Dict[int, int]:
+    """RN27: último `quantidade_sistema` fechado de cada item, ignorando o
+    inventário informado (um dia já fechado não pode herdar de si mesmo).
+    Item ausente do dicionário nunca apareceu num inventário fechado."""
+    herdado: Dict[int, int] = {}
+    for item_id, entradas in ranking.items():
+        for inventario_id, quantidade_sistema in entradas:
+            if excluir_inventario_id is not None and inventario_id == excluir_inventario_id:
+                continue
+            herdado[item_id] = quantidade_sistema
+            break
+    return herdado
+
+
 def ultimas_quantidades_sistema_fechadas(
     db: Session,
     item_ids: List[int],
@@ -114,23 +162,9 @@ def ultimas_quantidades_sistema_fechadas(
     """RN27: último `quantidade_sistema` fechado de cada item (0 se o item
     nunca apareceu num inventário fechado). Vale tanto para o dia ainda não
     iniciado quanto para itens do catálogo sem linha num dia já existente."""
-    if not item_ids:
-        return {}
-
-    stmt = (
-        select(InventarioItem.item_id, InventarioItem.quantidade_sistema)
-        .join(Inventario, Inventario.id == InventarioItem.inventario_id)
-        .where(Inventario.status == "fechado", InventarioItem.item_id.in_(item_ids))
-        .order_by(Inventario.data.desc())
+    return heranca_do_ranking(
+        ranking_sistema_fechado(db, item_ids), excluir_inventario_id
     )
-    if excluir_inventario_id is not None:
-        stmt = stmt.where(Inventario.id != excluir_inventario_id)
-
-    ultimo_por_item: Dict[int, int] = {}
-    for item_id, quantidade_sistema in db.execute(stmt).all():
-        if item_id not in ultimo_por_item:
-            ultimo_por_item[item_id] = quantidade_sistema
-    return ultimo_por_item
 
 
 def montar_item_sem_linha(item: Item, quantidade_sistema: int) -> Dict:
@@ -141,6 +175,52 @@ def montar_item_sem_linha(item: Item, quantidade_sistema: int) -> Dict:
     objeto["diferenca"] = -quantidade_sistema
     objeto["status"] = "correto" if quantidade_sistema == 0 else "falta"
     return objeto
+
+
+def montar_oleos_e_pecas(
+    catalogo: List[Item],
+    linhas: List[Tuple[InventarioItem, Item]],
+    heranca: Dict[int, int],
+) -> Tuple[List[Dict], List[Dict]]:
+    """Monta as duas listas de um dia que já existe em `inventarios`.
+
+    Óleos e graxas saem sempre do catálogo fixo: o dia pode ter linha para
+    alguns itens e nenhuma para os outros, e a contagem precisa dos 11 mesmo
+    assim — os sem linha herdam o sistema do último fechamento (RN27).
+    Peças vêm só do que existe no dia (são importadas de XML, RN12/RN13).
+    Óleos/graxas fora do catálogo (item desativado, por exemplo) continuam
+    aparecendo se tiverem linha, para não sumir dado já contado.
+
+    Compartilhada pelo detalhe do dia e pelo resumo da listagem, para que os
+    dois nunca divirjam."""
+    linhas_por_item = {inventario_item.item_id: inventario_item for inventario_item, _ in linhas}
+    ids_catalogo = {item.id for item in catalogo}
+
+    oleos: List[Dict] = []
+    for item in catalogo:
+        inventario_item = linhas_por_item.get(item.id)
+        if inventario_item is None:
+            oleos.append(montar_item_sem_linha(item, heranca.get(item.id, 0)))
+        else:
+            oleos.append(montar_item(item, inventario_item))
+
+    pecas: List[Dict] = []
+    for inventario_item, item in linhas:
+        if item.categoria in ("oleo", "graxa"):
+            if item.id not in ids_catalogo:
+                oleos.append(montar_item(item, inventario_item))
+        else:
+            pecas.append(montar_item(item, inventario_item))
+
+    return oleos, pecas
+
+
+def somar_resumos(*resumos: Dict[str, int]) -> Dict[str, int]:
+    total = {"falta": 0, "sobra": 0, "correto": 0}
+    for resumo in resumos:
+        for chave in total:
+            total[chave] += resumo.get(chave, 0)
+    return total
 
 
 @router.get("", response_model=InventarioListResponse)
@@ -160,22 +240,38 @@ def list_inventarios(
     stmt = select(Inventario).where(*filtro).order_by(Inventario.data.desc()).offset((pagina - 1) * tamanho_pagina).limit(tamanho_pagina)
     inventarios = db.scalars(stmt).all()
 
-    resumo_query = (
-        select(
-            Inventario.id,
-            InventarioItem.status,
-            func.count().label("quantidade"),
-        )
-        .join(InventarioItem, Inventario.id == InventarioItem.inventario_id)
-        .where(*filtro)
-        .group_by(Inventario.id, InventarioItem.status)
-    )
+    # O `resumo` da listagem tem que ser exatamente
+    # `resumo_oleos + resumo_pecas` do `GET /inventarios/{data}` do mesmo dia
+    # (seção 2.1 do document-rest-API.md). Por isso ele é montado pelos mesmos
+    # helpers, e não por um COUNT sobre `inventario_itens` — que ignoraria os
+    # óleos do catálogo ainda sem linha no dia.
+    ids_pagina = [inventario.id for inventario in inventarios]
+    catalogo = catalogo_oleos_graxas(db)
 
-    resumo_rows = db.execute(resumo_query).all()
+    linhas_por_inventario: Dict[int, List[Tuple[InventarioItem, Item]]] = {}
+    if ids_pagina:
+        linhas_rows = db.execute(
+            select(InventarioItem, Item)
+            .join(Item, InventarioItem.item_id == Item.id)
+            .where(InventarioItem.inventario_id.in_(ids_pagina))
+        ).all()
+        for inventario_item, item in linhas_rows:
+            linhas_por_inventario.setdefault(inventario_item.inventario_id, []).append(
+                (inventario_item, item)
+            )
+
+    # Uma única consulta de herança RN27 para a página inteira: o ranking é
+    # resolvido em memória por dia, evitando N+1.
+    ranking = ranking_sistema_fechado(db, [item.id for item in catalogo])
+
     resumos: Dict[int, Dict[str, int]] = {}
-    for inventario_id, status_value, quantidade in resumo_rows:
-        resumos.setdefault(inventario_id, {"falta": 0, "sobra": 0, "correto": 0})
-        resumos[inventario_id][status_value] = quantidade
+    for inventario in inventarios:
+        oleos, pecas = montar_oleos_e_pecas(
+            catalogo,
+            linhas_por_inventario.get(inventario.id, []),
+            heranca_do_ranking(ranking, excluir_inventario_id=inventario.id),
+        )
+        resumos[inventario.id] = somar_resumos(contar_resumo(oleos), contar_resumo(pecas))
 
     resultados = [
         {
@@ -229,38 +325,14 @@ def get_inventario(data: str, db: Session = Depends(get_db)):
         .where(InventarioItem.inventario_id == inventario.id)
     )
     inventario_rows = db.execute(inventario_items_query).all()
-    linhas_por_item = {
-        inventario_item.item_id: (inventario_item, item)
-        for inventario_item, item in inventario_rows
-    }
+    ids_com_linha = {inventario_item.item_id for inventario_item, _ in inventario_rows}
 
-    # Óleos e graxas saem sempre do catálogo fixo: o dia pode ter linha para
-    # alguns itens e nenhuma para os outros, e a tela precisa dos 11 mesmo
-    # assim. Os que não têm linha herdam o sistema do último fechamento.
-    ids_sem_linha = [item.id for item in catalogo if item.id not in linhas_por_item]
+    ids_sem_linha = [item.id for item in catalogo if item.id not in ids_com_linha]
     ultimo_por_item = ultimas_quantidades_sistema_fechadas(
         db, ids_sem_linha, excluir_inventario_id=inventario.id
     )
 
-    oleos = []
-    for item in catalogo:
-        par = linhas_por_item.get(item.id)
-        if par is None:
-            oleos.append(montar_item_sem_linha(item, ultimo_por_item.get(item.id, 0)))
-        else:
-            oleos.append(montar_item(item, par[0]))
-
-    # Peças vêm só do que existe no dia (são importadas de XML, RN12/RN13).
-    # Óleos/graxas fora do catálogo (item desativado, por exemplo) continuam
-    # aparecendo se tiverem linha, para não sumir dado já contado.
-    ids_catalogo = {item.id for item in catalogo}
-    pecas = []
-    for inventario_item, item in inventario_rows:
-        if item.categoria in ("oleo", "graxa"):
-            if item.id not in ids_catalogo:
-                oleos.append(montar_item(item, inventario_item))
-        else:
-            pecas.append(montar_item(item, inventario_item))
+    oleos, pecas = montar_oleos_e_pecas(catalogo, inventario_rows, ultimo_por_item)
 
     return {
         "data": inventario.data,

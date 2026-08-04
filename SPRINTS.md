@@ -383,12 +383,86 @@ seguro uma pessoa/uma sessão só levar do início ao fim.
 
 ## Sprint 5 — Histórico
 
-- [ ] Frontend: hook `useHistorico()`
-- [ ] Frontend: `HistoricoListItem` + `HistoricoPage`
-- [ ] Frontend: "Abrir" um dia do histórico carrega Contagem/Inventários com os dados daquele dia (RF21, RN26)
-- [ ] Teste manual: abrir um dia fechado, editar um valor, salvar de novo, confirmar que `fechado_em` original não mudou (RN18)
+- [x] Frontend: hook `useHistorico()`
+- [x] Frontend: `HistoricoListItem` + `HistoricoPage`
+- [x] Frontend: "Abrir" um dia do histórico carrega Contagem/Inventários com os dados daquele dia (RF21, RN26)
+- [x] Teste manual: abrir um dia fechado, editar um valor, salvar de novo, confirmar que `fechado_em` original não mudou (RN18)
+      — **verificado em 2026-08-04 contra o ambiente Docker real** (ver nota de
+      verificação abaixo). Ressalva: exercitado via HTTP + conferência direta no
+      Postgres, **não clicando no botão "Abrir" no navegador**.
 
 **Dependências:** Sprints 1, 2 e 3.
+
+> **Nota (frontend-dev, 2026-08-04):** implementado `listarInventarios()` em
+> `api/inventarios.ts` (GET `/api/v1/inventarios`, params `status`/`pagina`/
+> `tamanho_pagina`, sem filtrar `status` por padrão — deixa o backend aplicar
+> RN25), o hook `useHistorico()` com paginação incremental (`carregarMais()`,
+> página padrão 30 itens), `HistoricoListItem` (resumo por linha via
+> `SummaryBar` — ver log de decisões: nasceu como contadores compactos e foi
+> trocado pelo `SummaryBar` a pedido da pessoa no mesmo dia) e
+> `HistoricoPage` reescrita (sem `DateSelector`, já que a lista não depende de
+> uma data selecionada). "Abrir" chama `onDataChange(data)` e navega para
+> `/contagem` (decisão de UX: Contagem é a aba principal de edição e já tem o
+> `EditingBanner` pronto para RN19). `npx tsc --noEmit` e `npm run build`
+> passam sem erro, e `npm run dev` sobe e serve a SPA normalmente.
+>
+> **Verificação contra o ambiente Docker real (2026-08-04):** os três serviços
+> subiram (`docker compose up --build -d`, `db` healthy) e o teste do RN18 foi
+> feito de ponta a ponta num dia novo (`2026-08-02`), criado só para não mexer
+> nos dados de validação de 2026-08-03:
+> - `PATCH` no item 6 → `POST /fechar` → `fechado_em = 11:27:17.613254+00`.
+> - Com o dia **já fechado**, novo `PATCH` (estoque 100 + oficina 64) e
+>   `POST /fechar` de novo → **`fechado_em` idêntico** (RN18 ✅), o dia
+>   continuou `fechado` (RN19) e a edição persistiu (`quantidade_fisica = 164`,
+>   `diferenca 0`, `status correto` — conferido direto no Postgres).
+> - `GET /api/v1/inventarios` devolve exatamente o contrato que
+>   `listarInventarios()`/`useHistorico()` esperam (`total`, `pagina`,
+>   `tamanho_pagina`, `resultados[].data/status/fechado_em/resumo`), ordenado do
+>   mais recente para o mais antigo (RN25) com os dois dias fechados.
+> - Frontend responde `200` em `/` e em `/historico`; encoding de acentos
+>   correto na resposta da API (`STO SINTÉTICO 80W90`).
+>
+> **Não exercitado:** o clique no botão "Abrir" dentro do navegador (a
+> navegação `onDataChange` + `navigate("/contagem")` foi conferida por leitura
+> de código, não por interação real), e a paginação `carregarMais()` — com só
+> 2 dias fechados no banco, `temMais` é sempre `false` e o botão nunca aparece.
+
+### 🐛 Bug encontrado durante a verificação do Sprint 5 — CORRIGIDO em 2026-08-04
+
+- [x] **O `resumo` de `GET /api/v1/inventarios` conta só as linhas existentes
+      em `inventario_itens`, enquanto `GET /inventarios/{data}` conta o
+      catálogo fixo inteiro.** É exatamente a mesma classe do bug corrigido no
+      Sprint 1, mas na rota de *listagem*, que ficou de fora daquela correção.
+      Causa: `backend/app/routers/inventarios.py` linha ~163, onde `resumo_query`
+      parte de `Inventario.join(InventarioItem)` em vez do catálogo.
+      Reproduzido em 2026-08-04 com o dia `2026-08-02`, que tem só 1 dos 11
+      óleos lançado:
+      - Histórico (listagem): `0 falta / 0 sobra / 1 correto`
+      - Ao abrir o mesmo dia: `6 falta / 0 sobra / 5 correto`
+      `docs/document-rest-API.md` seção 2.1 diz que esse `resumo` é "óleos +
+      peças somados", e o próprio exemplo da seção 2.2 conta os 11 óleos do
+      catálogo — ou seja, os dois deveriam bater. O Sprint 5 **expõe** o bug
+      (é o número que o `HistoricoListItem` mostra), mas a correção é de
+      **backend**.
+      **Correção aplicada (decisão da pessoa, 2026-08-04):** extraído o helper
+      `montar_oleos_e_pecas(catalogo, linhas, heranca)` com a lógica que estava
+      inline em `get_inventario`; as duas rotas agora partem dele, então não dá
+      mais para uma divergir da outra — é a mesma cura do Sprint 1, agora
+      aplicada na raiz. Para não virar N+1 na listagem (até 30 dias por
+      página), a herança RN27 foi decomposta em `ranking_sistema_fechado`
+      (uma query, os dois fechamentos mais recentes por item) +
+      `heranca_do_ranking` (resolve em memória qual vale para cada dia);
+      `ultimas_quantidades_sistema_fechadas` continua com a mesma assinatura e
+      semântica, então `get_inventario`, `_semear_oleos_do_dia` e a importação
+      de XML não mudaram. A listagem faz **5 queries fixas**, independente do
+      número de dias.
+      **Verificado em 2026-08-04** (conferido também de forma independente,
+      fora do relatório do agente): `2026-08-02` listagem `6/0/5` = detalhe
+      `6/0/5` (era `0/0/1`); `2026-08-03` — o caso de controle, com todas as 71
+      linhas — segue `44/0/27` nos dois lados, inalterado. Paginação
+      (`tamanho_pagina=1`, páginas 1/2/3), `?status=fechado`,
+      `?status=rascunho`, dia `nao_iniciado` e data inválida (400 com envelope)
+      seguem corretos.
 
 ---
 
@@ -545,6 +619,60 @@ seguro uma pessoa/uma sessão só levar do início ao fim.
   sistema é interno e sem autenticação (fora de escopo, `requisitos.md`
   seção 3), então o risco é baixo, mas a correção seria trocar por
   `defusedxml`. **Decisão da pessoa** → 2026-08-03.
+- [Sprint 5] `docs/document-rest-API.md` seção 8 já deixava o tamanho de
+  página do histórico (30) como sugestão não confirmada; o hook
+  `useHistorico()` reaproveita o mesmo valor usado pelo backend desde o
+  Sprint 1, com paginação incremental (`carregarMais()` concatena páginas
+  em vez de substituir) — não é uma regra de negócio nova, só a mesma
+  decisão pendente do Sprint 1 sendo reaplicada no consumidor
+  → 2026-08-04.
+- [Sprint 5] `docs/componentes-react.md` não especifica para qual aba
+  (Contagem ou Inventários) o botão "Abrir" do Histórico deve navegar
+  (RF21/RN26 só dizem "carrega Contagem/Inventários") → decisão: navega
+  para `/contagem`, por ser a primeira aba e já ter o `EditingBanner`
+  pronto para sinalizar edição de um dia fechado (RN19); ambas as abas
+  compartilham a mesma data via `App`, então o usuário pode trocar para
+  Inventários manualmente sem perder o dia carregado → 2026-08-04.
+- [Sprint 5] Formato do resumo em `HistoricoListItem`: o agente que
+  implementou tinha optado por três contadores compactos em vez do
+  `SummaryBar` (para não pesar uma lista longa) → **revertido por decisão da
+  pessoa em 2026-08-04: usar o `SummaryBar`**, pela consistência visual entre
+  as três telas (RNF01). O `SummaryBar.tsx` não foi alterado; a adaptação para
+  caber numa linha de lista é só CSS escopado em `.historico-list-item`, então
+  Contagem e Inventários continuam idênticas.
+- [Sprint 5] **Efeito colateral da decisão acima:** os contadores antigos do
+  Histórico eram coloridos (`status-falta`/`status-sobra`/`status-correto`),
+  e o `SummaryBar` não coloria seus cartões em tela nenhuma — a troca fez o
+  Histórico perder o cue de cor. Colorir só no Histórico recriaria a
+  inconsistência que a mudança veio eliminar, então a escolha era entre não
+  ter cor ou colorir o `SummaryBar` nas três telas → **decisão da pessoa em
+  2026-08-04: colorir nas três, na versão "acento"** — borda lateral e número
+  coloridos, fundo branco. O preenchimento cheio (como no `StatusBadge`) foi
+  descartado porque poria três blocos grandes de cor no topo de Contagem e
+  Inventários, competindo com os badges de cada item, que já usam esses mesmos
+  tons em área pequena. Implementado com as classes `summary-card-falta`/
+  `-sobra`/`-correto` em `SummaryBar.tsx` + regras em `index.css`,
+  reaproveitando a paleta que o `StatusBadge` já usava (nenhuma cor nova foi
+  inventada). O rótulo em texto continua sendo o portador principal do
+  significado, com a cor só como reforço — o que ajuda na revisão de
+  acessibilidade do Sprint 6.
+- [Sprint 5] As outras duas decisões de UX foram **confirmadas pela pessoa em
+  2026-08-04** e ficam como estão: paginação incremental com "Carregar mais"
+  (em vez de páginas numeradas) e "Abrir" navegando para a aba Contagem.
+- [Sprint 5] **Bug de backend encontrado, não corrigido** (ver seção do Sprint
+  5): o `resumo` de `GET /inventarios` conta só as linhas de
+  `inventario_itens`, enquanto `GET /inventarios/{data}` conta o catálogo
+  fixo — o mesmo dia mostra números diferentes no Histórico e ao ser aberto.
+  Não corrigido de imediato porque é correção de backend surgida num sprint
+  de frontend; **decisão da pessoa** sobre corrigir agora ou abrir como item
+  do Sprint 6 → 2026-08-04.
+- [Infra/dev] O ambiente **desta máquina tem Docker e Node disponíveis**
+  (Docker 29.6.2 / Compose v5.3.1, Node v26.5.0 / npm 11.17.0), ao contrário
+  do que as notas dos Sprints 0–2 registravam sobre as sandboxes de agente.
+  O daemon do Docker Desktop precisa estar rodando antes do `docker compose`
+  (só o CLI no PATH não basta). O volume do Postgres **persiste** entre
+  sessões — em 2026-08-04 o banco ainda tinha as tabelas, o seed (71 itens) e
+  o dia 2026-08-03 fechado da validação anterior → 2026-08-04.
 - [Infra/dev] O bind mount do Windows não propaga eventos de arquivo para
   o contêiner, então o HMR do Vite não recompila sozinho ao editar
   `frontend/src/` — foi preciso `docker compose restart frontend` para ver
