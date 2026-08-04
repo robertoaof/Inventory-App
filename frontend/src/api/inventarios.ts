@@ -55,6 +55,15 @@ export interface InventarioDoDia {
   pecas: ItemPeca[];
 }
 
+export interface ResumoImportacao {
+  arquivo: string;
+  processado_em: string;
+  oleos_atualizados: number;
+  pecas_novas: number;
+  pecas_atualizadas: number;
+  codigos_duplicados: string[];
+}
+
 export interface InventarioFechado {
   data: string;
   status: "fechado";
@@ -139,6 +148,28 @@ export async function patchItem(
   }
 
   return (await response.json()) as ItemOleoOuGraxa | ItemPeca;
+}
+
+/**
+ * Envia o XML de conferência do dia (RF07). O arquivo vai cru, como
+ * multipart/form-data — o navegador nunca abre nem interpreta o conteúdo,
+ * todo o parsing é do backend (docs/fluxo-de-telas.md seção 4).
+ * POST /api/v1/inventarios/{data}/importar-xml
+ */
+export async function importarXML(data: string, arquivo: File): Promise<ResumoImportacao> {
+  const corpo = new FormData();
+  corpo.append("arquivo", arquivo);
+
+  const response = await fetch(`${API_BASE_URL}/api/v1/inventarios/${data}/importar-xml`, {
+    method: "POST",
+    body: corpo,
+  });
+
+  if (!response.ok) {
+    await parseErroOuLancar(response);
+  }
+
+  return (await response.json()) as ResumoImportacao;
 }
 
 /**

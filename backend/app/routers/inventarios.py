@@ -1,7 +1,10 @@
+import logging
+import re
+import xml.etree.ElementTree as ET
 from datetime import date
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
-from fastapi import APIRouter, Body, Depends, Query
+from fastapi import APIRouter, Body, Depends, File, Query, UploadFile
 from fastapi.responses import JSONResponse
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
@@ -15,6 +18,17 @@ from app.schemas import ImportacaoXMLResponse, InventarioListItem, InventarioLis
 # estoque/oficina; graxas e peças usam quantidade_fisica direta (RN07/RN08).
 CAMPOS_COM_QUEBRA = ("estoque", "oficina")
 CAMPOS_SEM_QUEBRA = ("quantidade_fisica",)
+
+# Estrutura do XML de conferência (fluxo-de-telas.md seção 4.2): cada item é
+# um elemento <Dados> e os campos vêm em atributos numerados.
+ELEMENTO_ITEM_XML = "Dados"
+ATRIBUTO_LOCALIZACAO = "Coluna1"
+ATRIBUTO_SISTEMA = "Coluna2"
+ATRIBUTO_UNIDADE = "Coluna4"
+ATRIBUTO_CODIGO = "Coluna6"
+ATRIBUTO_DESCRICAO = "Coluna7"
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -382,6 +396,260 @@ def patch_item(
     db.refresh(inventario_item)
 
     return montar_item(item, inventario_item)
+
+
+def _atributo(elemento: ET.Element, nome: str) -> str:
+    return (elemento.get(nome) or "").strip()
+
+
+def _inteiro_do_inicio(texto: str) -> int:
+    """Mesma leitura tolerante do protótipo (`parseInt(raw, 10) || 0`): usa o
+    inteiro do início da string e cai para 0 quando não há nenhum. Evita que
+    um campo com lixo ("12 UN", "", "-") derrube a importação inteira."""
+    correspondencia = re.match(r"-?\d+", texto)
+    return int(correspondencia.group()) if correspondencia else 0
+
+
+def extrair_itens_xml(conteudo: bytes) -> List[Dict]:
+    """Percorre os elementos <Dados> do arquivo e lê Coluna1/2/4/6/7
+    (fluxo-de-telas.md seção 4.2). Itens sem código são descartados, como no
+    protótipo — sem código não há identidade (RN04). Levanta `ET.ParseError`
+    se o arquivo não for um XML bem formado (tratado como 422 pela rota)."""
+    raiz = ET.fromstring(conteudo)
+
+    itens: List[Dict] = []
+    for elemento in raiz.iter():
+        # `rsplit` descarta o namespace ({uri}Dados), caso o relatório venha
+        # com um — o protótipo casava só pelo nome local.
+        if elemento.tag.rsplit("}", 1)[-1] != ELEMENTO_ITEM_XML:
+            continue
+
+        codigo = _atributo(elemento, ATRIBUTO_CODIGO)
+        if not codigo:
+            continue
+
+        itens.append(
+            {
+                "codigo": codigo,
+                "descricao": _atributo(elemento, ATRIBUTO_DESCRICAO),
+                "unidade": _atributo(elemento, ATRIBUTO_UNIDADE),
+                "localizacao": _atributo(elemento, ATRIBUTO_LOCALIZACAO),
+                "quantidade_sistema": _inteiro_do_inicio(_atributo(elemento, ATRIBUTO_SISTEMA)),
+            }
+        )
+    return itens
+
+
+def deduplicar_por_codigo(itens: List[Dict]) -> Tuple[List[Dict], List[str]]:
+    """RN14: se um código aparece mais de uma vez no mesmo arquivo, vale o
+    último valor encontrado e o código entra na lista de avisos."""
+    por_codigo: Dict[str, Dict] = {}
+    duplicados: List[str] = []
+
+    for item in itens:
+        codigo = item["codigo"]
+        if codigo in por_codigo and codigo not in duplicados:
+            duplicados.append(codigo)
+        por_codigo[codigo] = item
+
+    return list(por_codigo.values()), duplicados
+
+
+def _garantir_linha_do_item(db: Session, inventario: Inventario, item: Item) -> InventarioItem:
+    linha = db.scalar(
+        select(InventarioItem).where(
+            InventarioItem.inventario_id == inventario.id,
+            InventarioItem.item_id == item.id,
+        )
+    )
+    if linha is None:
+        linha = InventarioItem(
+            inventario_id=inventario.id,
+            item_id=item.id,
+            quantidade_fisica=0,
+            quantidade_sistema=0,
+        )
+        db.add(linha)
+        db.flush()
+    return linha
+
+
+def _semear_oleos_do_dia(db: Session, inventario: Inventario) -> None:
+    """Passo 4.5.1 do fluxo: ao importar, os óleos e graxas que NÃO vierem no
+    XML precisam já constar no dia com o último sistema fechado conhecido, e
+    não com zero (RN27)."""
+    catalogo = catalogo_oleos_graxas(db)
+    existentes = set(
+        db.scalars(
+            select(InventarioItem.item_id).where(InventarioItem.inventario_id == inventario.id)
+        ).all()
+    )
+
+    faltantes = [item for item in catalogo if item.id not in existentes]
+    if not faltantes:
+        return
+
+    ultimos = ultimas_quantidades_sistema_fechadas(
+        db, [item.id for item in faltantes], excluir_inventario_id=inventario.id
+    )
+    for item in faltantes:
+        db.add(
+            InventarioItem(
+                inventario_id=inventario.id,
+                item_id=item.id,
+                quantidade_fisica=0,
+                quantidade_sistema=ultimos.get(item.id, 0),
+            )
+        )
+    db.flush()
+
+
+def _aplicar_importacao(
+    db: Session,
+    data_obj: date,
+    nome_arquivo: str,
+    itens_xml: List[Dict],
+    codigos_duplicados: List[str],
+    conteudo: bytes,
+) -> Dict:
+    """Passos 4.4 a 4.7 do fluxo. Sem commit: quem chama decide confirmar ou
+    desfazer, para que a importação seja tudo-ou-nada (4.8)."""
+    catalogo_por_codigo: Dict[str, Item] = {}
+    codigos = [item["codigo"] for item in itens_xml]
+    if codigos:
+        for item in db.scalars(select(Item).where(Item.codigo.in_(codigos))).all():
+            catalogo_por_codigo[item.codigo] = item
+
+    # RN16: junto com o PATCH, a importação é a outra rota que pode dar à luz
+    # o inventário do dia.
+    inventario = db.scalar(select(Inventario).where(Inventario.data == data_obj))
+    if inventario is None:
+        inventario = Inventario(data=data_obj, status="rascunho")
+        db.add(inventario)
+        db.flush()
+
+    _semear_oleos_do_dia(db, inventario)
+
+    oleos_atualizados = 0
+    pecas_novas = 0
+    pecas_atualizadas = 0
+
+    for dados in itens_xml:
+        item = catalogo_por_codigo.get(dados["codigo"])
+
+        if item is not None and item.categoria in ("oleo", "graxa"):
+            # RN11: óleo/graxa conhecido só tem o sistema atualizado. A
+            # quantidade física é sempre contagem manual — a importação
+            # nunca encosta nela.
+            linha = _garantir_linha_do_item(db, inventario, item)
+            linha.quantidade_sistema = dados["quantidade_sistema"]
+            oleos_atualizados += 1
+            continue
+
+        if item is None:
+            # RN12: código desconhecido nasce como peça no catálogo.
+            item = Item(
+                codigo=dados["codigo"],
+                descricao=dados["descricao"] or dados["codigo"],
+                unidade=dados["unidade"] or None,
+                categoria="peca",
+                possui_quebra_estoque_oficina=False,
+                localizacao_padrao=dados["localizacao"] or None,
+            )
+            db.add(item)
+            db.flush()
+            pecas_novas += 1
+        else:
+            # Peça já vista antes: só descrição/localização/unidade se vieram
+            # preenchidas no arquivo (RN04, RN12).
+            if dados["descricao"]:
+                item.descricao = dados["descricao"]
+            if dados["localizacao"]:
+                item.localizacao_padrao = dados["localizacao"]
+            if dados["unidade"]:
+                item.unidade = dados["unidade"]
+            pecas_atualizadas += 1
+
+        # RN13: upsert que preserva a quantidade física já digitada — é isso
+        # que torna seguro reimportar o mesmo arquivo.
+        linha = _garantir_linha_do_item(db, inventario, item)
+        linha.quantidade_sistema = dados["quantidade_sistema"]
+
+    # RN15 / passo 4.7: registro de auditoria, que sobrevive até a uma
+    # "Nova contagem" posterior (RN21), porque essa não apaga o inventário.
+    registro = ImportacaoXML(
+        inventario_id=inventario.id,
+        nome_arquivo=nome_arquivo,
+        itens_conhecidos_atualizados=oleos_atualizados,
+        itens_novos=pecas_novas,
+        itens_atualizados=pecas_atualizadas,
+        codigos_duplicados=codigos_duplicados or None,
+        conteudo_arquivo=conteudo.decode("utf-8", errors="replace"),
+    )
+    db.add(registro)
+    db.flush()
+    db.refresh(registro)
+
+    return {
+        "arquivo": registro.nome_arquivo,
+        "processado_em": registro.importado_em.isoformat(),
+        "oleos_atualizados": oleos_atualizados,
+        "pecas_novas": pecas_novas,
+        "pecas_atualizadas": pecas_atualizadas,
+        "codigos_duplicados": codigos_duplicados,
+    }
+
+
+@router.post("/{data}/importar-xml", response_model=ImportacaoXMLResponse)
+async def importar_xml(
+    data: str,
+    arquivo: Optional[UploadFile] = File(default=None),
+    db: Session = Depends(get_db),
+):
+    """Importa o XML de conferência do dia (RF07–RF15, RN10–RN15, RN27).
+
+    Todo o processamento roda numa única transação: ou a importação inteira
+    é aplicada, ou nada dela é (fluxo-de-telas.md seção 4.8)."""
+    data_obj = parse_data(data)
+    if data_obj is None:
+        return erro("data_invalida", "Formato de data inválido. Use AAAA-MM-DD.", 400)
+
+    if arquivo is None:
+        return erro("arquivo_ausente", "Envie o arquivo XML no campo 'arquivo' do formulário.", 400)
+
+    conteudo = await arquivo.read()
+    if not conteudo.strip():
+        return erro("arquivo_ausente", "O arquivo enviado está vazio.", 400)
+
+    # Passo 4.1: valida antes de tocar no banco.
+    try:
+        itens_xml = extrair_itens_xml(conteudo)
+    except ET.ParseError:
+        return erro(
+            "xml_invalido",
+            "Não foi possível ler esse arquivo XML. Verifique se o arquivo é válido.",
+            422,
+        )
+
+    itens_xml, codigos_duplicados = deduplicar_por_codigo(itens_xml)
+
+    try:
+        resumo = _aplicar_importacao(
+            db, data_obj, arquivo.filename or "arquivo.xml", itens_xml, codigos_duplicados, conteudo
+        )
+        db.commit()
+    except Exception:
+        # Passo 4.8: qualquer falha desfaz a transação inteira — nunca fica
+        # meia importação gravada.
+        db.rollback()
+        logger.exception("Falha ao importar XML do dia %s", data)
+        return erro(
+            "falha_importacao",
+            "Falha ao processar a importação. Nenhuma alteração foi gravada.",
+            500,
+        )
+
+    return resumo
 
 
 @router.post("/{data}/fechar")

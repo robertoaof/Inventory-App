@@ -336,19 +336,43 @@ seção 6) — perguntar à pessoa antes de decidir sozinho.
 
 Sub-tarefas na ordem do `docs/fluxo-de-telas.md` seção 4:
 
-- [ ] Backend: validação de upload + XML bem formado (`422` se inválido) — RNF08
-- [ ] Backend: parsing dos elementos `<Dados>` (Coluna1/2/4/6/7)
-- [ ] Backend: detecção de códigos duplicados dentro do arquivo (RN14)
-- [ ] Backend: cruzamento com `itens` por código (RN10)
-- [ ] Backend: atualização de óleos/graxas conhecidos — só `quantidade_sistema` (RN11)
-- [ ] Backend: upsert de peças novas/já vistas, preservando físico em reimportação (RN12, RN13)
-- [ ] Backend: gravação em `importacoes_xml` para auditoria (RN15)
-- [ ] Backend: tudo dentro de uma única transação com rollback em falha (4.8)
-- [ ] Frontend: `ImportXMLButton` (upload cru, sem parsing no navegador — RF07)
-- [ ] Frontend: `ImportSummaryDialog` mostrando o resumo retornado
-- [ ] Frontend: `PecaListItem` + `InventariosPage` completa
-- [ ] Frontend: `SearchInput` filtrando a lista de peças (RF13, RNF03)
-- [ ] Teste manual: importar o mesmo XML duas vezes, confirmar que não duplica e que o físico já preenchido não é sobrescrito
+- [x] Backend: validação de upload + XML bem formado (`422` se inválido) — RNF08
+- [x] Backend: parsing dos elementos `<Dados>` (Coluna1/2/4/6/7)
+- [x] Backend: detecção de códigos duplicados dentro do arquivo (RN14)
+- [x] Backend: cruzamento com `itens` por código (RN10)
+- [x] Backend: atualização de óleos/graxas conhecidos — só `quantidade_sistema` (RN11)
+- [x] Backend: upsert de peças novas/já vistas, preservando físico em reimportação (RN12, RN13)
+- [x] Backend: gravação em `importacoes_xml` para auditoria (RN15)
+- [x] Backend: tudo dentro de uma única transação com rollback em falha (4.8)
+- [x] Frontend: `ImportXMLButton` (upload cru, sem parsing no navegador — RF07)
+- [x] Frontend: `ImportSummaryDialog` mostrando o resumo retornado
+- [x] Frontend: `PecaListItem` + `InventariosPage` completa
+- [x] Frontend: `SearchInput` filtrando a lista de peças (RF13, RNF03)
+- [x] Teste manual: importar o mesmo XML duas vezes, confirmar que não duplica e que o físico já preenchido não é sobrescrito
+
+> **Verificado em 2026-08-03**, por HTTP e pela interface no navegador, com
+> um XML de teste montado para exercitar cada regra (óleo e graxa
+> conhecidos, peças novas, código duplicado, quantidade com lixo — `"12 UN"`
+> — e uma linha sem código):
+> - **RN14:** duplicado `1-2095029` detectado, valeu o último valor (99) e o
+>   código apareceu no aviso do resumo.
+> - **RN04:** linha sem código ignorada; `"12 UN"` virou 12 sem derrubar a
+>   importação.
+> - **RN11:** E7 e GRAXA CARDAN só tiveram `quantidade_sistema` alterada; o
+>   físico digitado ficou intacto.
+> - **RN27 / passo 4.5.1:** os 9 óleos e 2 graxas passam a constar no dia
+>   mesmo sem virem no XML, com o último sistema fechado.
+> - **RN13 (o teste que mais importa):** com físico 42 já digitado numa
+>   peça, uma segunda importação (arquivo diferente) subiu o sistema de 99
+>   para 55 e **preservou o físico** (diferença −13). As peças ausentes do
+>   segundo arquivo continuaram na lista — merge, nunca substituição. Nada
+>   duplicou: 14 linhas no dia e 3 peças no catálogo antes e depois.
+> - **RN15:** duas linhas em `importacoes_xml`, com contagens e duplicados,
+>   e ambas visíveis em `GET /inventarios/{data}/importacoes`.
+> - **Erros:** XML mal formado → `422`; sem arquivo → `400`; XML válido sem
+>   itens → `200` zerado, com o diálogo explicando que nada foi encontrado.
+> - **RF13:** a busca da aba Inventários filtra por código, descrição e
+>   locação.
 
 **Dependências:** Sprint 2 (reaproveita a lógica de "criar inventário do dia").
 **Atenção:** este sprint concentra a maior parte da regra de negócio —
@@ -500,6 +524,27 @@ seguro uma pessoa/uma sessão só levar do início ao fim.
   Histórico" só existe no Sprint 5. Por ora o botão volta para a data de
   hoje, via `dataLocalHoje()`. Quando o Sprint 5 chegar, reavaliar se
   cancelar deve voltar para o Histórico em vez de para hoje → 2026-08-03.
+- [Sprint 4] `backend/requirements.txt` não tinha `python-multipart`, exigido
+  pelo FastAPI para `UploadFile`/`File` — sem ele a rota de importação nem
+  sobe (bug técnico, não decisão de negócio) → adicionado
+  `python-multipart==0.0.9` → 2026-08-03.
+- [Sprint 4] `pecas_novas` vs. `pecas_atualizadas` no resumo: o contrato da
+  API não define qual é qual. Adotada a leitura do `fluxo-de-telas.md`
+  seção 4.6 — **nova** = código que ainda não existia em `itens`;
+  **atualizada** = peça já vista antes (mesmo que seja a primeira vez nesse
+  dia). Se a intenção era "nova neste dia", é só trocar o critério do
+  contador → 2026-08-03.
+- [Sprint 4] Um XML válido mas sem nenhum item **cria** a linha de
+  `inventarios` do dia, ainda que nada tenha sido lançado. É uma exceção
+  aparente à RN16, mas necessária: `importacoes_xml.inventario_id` é
+  `NOT NULL`, e a RN15 exige registrar toda importação para auditoria —
+  inclusive as que não trouxeram nada → 2026-08-03.
+- [Sprint 4] **Nota de segurança, não resolvida:** o parsing usa
+  `xml.etree.ElementTree` da biblioteca padrão, que é vulnerável a ataques
+  de expansão de entidade ("billion laughs") num arquivo malicioso. Hoje o
+  sistema é interno e sem autenticação (fora de escopo, `requisitos.md`
+  seção 3), então o risco é baixo, mas a correção seria trocar por
+  `defusedxml`. **Decisão da pessoa** → 2026-08-03.
 - [Infra/dev] O bind mount do Windows não propaga eventos de arquivo para
   o contêiner, então o HMR do Vite não recompila sozinho ao editar
   `frontend/src/` — foi preciso `docker compose restart frontend` para ver
