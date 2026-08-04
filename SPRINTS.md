@@ -298,14 +298,35 @@ padrão do histórico (`docs/document-rest-API.md` seção 8).
 
 ## Sprint 3 — Fechar dia e Nova contagem
 
-- [ ] Backend: `POST /api/v1/inventarios/{data}/fechar` (RF18, RF19, RN17–RN20)
-- [ ] Backend: `DELETE /api/v1/inventarios/{data}/itens` (RF22, RN21) — óleos zeram físico mas mantêm sistema (RN27); peças são apagadas
-- [ ] Frontend: `ActionsFooter` ligado às duas rotas acima
-- [ ] Frontend: `ConfirmDialog` de "confirma fechar esse dia?" antes de `POST /fechar`
-- [ ] Frontend: `EditingBanner` (aparece ao editar um dia já fechado)
+- [x] Backend: `POST /api/v1/inventarios/{data}/fechar` (RF18, RF19, RN17–RN20)
+- [x] Backend: `DELETE /api/v1/inventarios/{data}/itens` (RF22, RN21) — óleos zeram físico mas mantêm sistema (RN27); peças são apagadas
+- [x] Frontend: `ActionsFooter` ligado às duas rotas acima
+- [x] Frontend: `ConfirmDialog` de "confirma fechar esse dia?" antes de `POST /fechar`
+- [x] Frontend: `EditingBanner` (aparece ao editar um dia já fechado)
+
+> **Verificado em 2026-08-03**, backend via HTTP e frontend no navegador:
+> - `POST /fechar` em dia inexistente → `404` com o envelope de erro padrão.
+> - Re-fechar preserva o `fechado_em` do primeiro fechamento (RN18) —
+>   conferido comparando as duas respostas.
+> - `DELETE /itens`: óleo e graxa mantiveram `quantidade_sistema` (9 e 5) e
+>   tiveram físico/estoque/oficina/observação zerados; a linha da peça de
+>   teste foi apagada; `pecas: []` na resposta (RN21, RN27).
+> - Na tela: dia sem lançamento → `AlertDialog` explicando que não há o que
+>   salvar; dia em rascunho → "Confirma fechar a contagem desse dia?";
+>   dia fechado → "Esse dia já tem uma contagem salva..." no salvar e o
+>   aviso reforçado no "Nova contagem". `EditingBanner` aparece ao fechar e
+>   continua após limpar. Nenhum `confirm()`/`alert()` nativo (RNF02).
+>
+> **Bug corrigido no caminho:** o `status` do dia ficava defasado no estado
+> local — depois do primeiro PATCH o backend criava o rascunho (RN16), mas
+> a página continuava tratando o dia como `nao_iniciado` e recusava fechar.
+> `useInventarioDoDia` agora promove `nao_iniciado` → `rascunho` ao aplicar
+> a resposta do PATCH (um dia já `fechado` continua fechado, RN19).
 
 **Dependências:** Sprint 2.
-**Ponto em aberto a confirmar antes de implementar o DELETE:** se limpar um
+**Ponto em aberto — RESOLVIDO em 2026-08-03** (ver log de decisões): limpar
+um dia já fechado pede confirmação reforçada, e o dia continua fechado.
+**Texto original do ponto em aberto:** se limpar um
 dia já fechado deve pedir confirmação extra (`docs/rascunho-inventario.md`
 seção 6) — perguntar à pessoa antes de decidir sozinho.
 
@@ -461,6 +482,24 @@ seguro uma pessoa/uma sessão só levar do início ao fim.
   usando os componentes locais do `Date`. O helper existe para que o mesmo
   erro não se repita nas telas que ainda vão manipular datas
   → 2026-08-03.
+- [Sprint 3] **Ponto que estava em aberto** (`docs/rascunho-inventario.md`
+  seção 6): "Nova contagem" num dia já fechado deveria exigir confirmação
+  extra? → **Sim.** Decisão da pessoa em 2026-08-03: dia em rascunho recebe
+  uma confirmação simples; dia fechado recebe um `ConfirmDialog` que diz
+  explicitamente que a contagem já salva será apagada e que as quantidades
+  de sistema são mantidas. Motivo: protege contra apagar dado consolidado
+  por engano, sem impedir a correção legítima que a RN19 permite.
+- [Sprint 3] **Ponto derivado do anterior:** qual o status do dia depois de
+  limpar um dia que estava fechado? → **Continua fechado**, com o
+  `fechado_em` original preservado (RN18). Decisão da pessoa em 2026-08-03.
+  É a leitura mais direta de `docs/rascunho-inventario.md` seção 6, que
+  fala em manter a linha de `inventarios`. Implementado em
+  `limpar_itens` — a rota não toca em `status` nem em `fechado_em`.
+- [Sprint 3] `EditingBanner` precisava de um `onCancelar()` (props definidas
+  em `docs/componentes-react.md`), mas o fluxo de "abrir um dia do
+  Histórico" só existe no Sprint 5. Por ora o botão volta para a data de
+  hoje, via `dataLocalHoje()`. Quando o Sprint 5 chegar, reavaliar se
+  cancelar deve voltar para o Histórico em vez de para hoje → 2026-08-03.
 - [Infra/dev] O bind mount do Windows não propaga eventos de arquivo para
   o contêiner, então o HMR do Vite não recompila sozinho ao editar
   `frontend/src/` — foi preciso `docker compose restart frontend` para ver

@@ -71,9 +71,18 @@ export function useInventarioDoDia(data: string): UseInventarioDoDiaResult {
   const aplicarRespostaItem = useCallback((itemAtualizado: ItemOleoOuGraxa | ItemPeca) => {
     setInventario((atual) => {
       if (!atual) return atual;
+
+      // RN16: o PATCH que acabou de voltar criou a linha de `inventarios` se
+      // ela ainda não existia — então o dia deixou de ser "nao_iniciado" e
+      // passou a ser um rascunho. Sem isso o status local ficaria defasado
+      // até o próximo GET, e a página trataria um dia já iniciado como
+      // vazio. Um dia já `fechado` continua fechado (RN19).
+      const status = atual.status === "nao_iniciado" ? "rascunho" : atual.status;
+
       if (itemAtualizado.categoria === "peca") {
         return {
           ...atual,
+          status,
           pecas: atual.pecas.map((item) =>
             item.item_id === itemAtualizado.item_id ? (itemAtualizado as ItemPeca) : item
           ),
@@ -81,6 +90,7 @@ export function useInventarioDoDia(data: string): UseInventarioDoDiaResult {
       }
       return {
         ...atual,
+        status,
         oleos: atual.oleos.map((item) =>
           item.item_id === itemAtualizado.item_id ? (itemAtualizado as ItemOleoOuGraxa) : item
         ),

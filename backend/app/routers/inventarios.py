@@ -384,6 +384,84 @@ def patch_item(
     return montar_item(item, inventario_item)
 
 
+@router.post("/{data}/fechar")
+def fechar_inventario(data: str, db: Session = Depends(get_db)):
+    """Botão "Salvar contagem do dia" (RF18, RF19, RN17–RN20).
+
+    Não cria registro novo: só muda o status para `fechado`. Re-fechar um dia
+    já fechado (depois de uma correção, RN19) preserva o `fechado_em` do
+    primeiro fechamento (RN18)."""
+    data_obj = parse_data(data)
+    if data_obj is None:
+        return erro("data_invalida", "Formato de data inválido. Use AAAA-MM-DD.", 400)
+
+    inventario = db.scalar(select(Inventario).where(Inventario.data == data_obj))
+    if inventario is None:
+        return erro(
+            "inventario_nao_encontrado",
+            "Não existe contagem para essa data — nada a fechar.",
+            404,
+        )
+
+    inventario.status = "fechado"
+    # RN18: só grava o horário no primeiro fechamento. Num re-fechamento o
+    # valor original é preservado, e é ele que volta na resposta.
+    if inventario.fechado_em is None:
+        inventario.fechado_em = func.now()
+
+    db.commit()
+    db.refresh(inventario)
+
+    return {
+        "data": inventario.data.isoformat(),
+        "status": inventario.status,
+        "fechado_em": inventario.fechado_em.isoformat() if inventario.fechado_em else None,
+    }
+
+
+@router.delete("/{data}/itens", response_model=InventarioResponse, response_model_exclude_none=True)
+def limpar_itens(data: str, db: Session = Depends(get_db)):
+    """Botão "Nova contagem" (RF22, RN21).
+
+    Não é uma exclusão geral (seção 2.6 do document-rest-API.md): óleos e
+    graxas só têm os campos físicos zerados, mantendo `quantidade_sistema`
+    (RN27); as linhas de peças são apagadas, porque a lista de peças do dia
+    é reconstruída pela próxima importação de XML (RN12). Só a data
+    selecionada é afetada (RN21)."""
+    data_obj = parse_data(data)
+    if data_obj is None:
+        return erro("data_invalida", "Formato de data inválido. Use AAAA-MM-DD.", 400)
+
+    inventario = db.scalar(select(Inventario).where(Inventario.data == data_obj))
+    if inventario is None:
+        return erro(
+            "inventario_nao_encontrado",
+            "Não existe contagem para essa data — nada a limpar.",
+            404,
+        )
+
+    linhas = db.execute(
+        select(InventarioItem, Item)
+        .join(Item, InventarioItem.item_id == Item.id)
+        .where(InventarioItem.inventario_id == inventario.id)
+    ).all()
+
+    for inventario_item, item in linhas:
+        if item.categoria in ("oleo", "graxa"):
+            inventario_item.quantidade_fisica = 0
+            inventario_item.quantidade_estoque = None
+            inventario_item.quantidade_oficina = None
+            inventario_item.observacao = None
+        else:
+            db.delete(inventario_item)
+
+    # Decisão do usuário (2026-08-03): limpar um dia já fechado não o reabre —
+    # o status e o `fechado_em` original são preservados. Ver SPRINTS.md.
+    db.commit()
+
+    return get_inventario(data, db)
+
+
 @router.get("/{data}/importacoes", response_model=List[ImportacaoXMLResponse])
 def list_importacoes(data: str, db: Session = Depends(get_db)):
     data_obj = parse_data(data)

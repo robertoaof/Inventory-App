@@ -4,13 +4,23 @@ import SummaryBar from "../components/comuns/SummaryBar";
 import SearchInput from "../components/comuns/SearchInput";
 import SaveStatusIndicator from "../components/comuns/SaveStatusIndicator";
 import AlertDialog from "../components/comuns/AlertDialog";
+import ConfirmDialog from "../components/comuns/ConfirmDialog";
+import EditingBanner from "../components/comuns/EditingBanner";
 import OleoCard, { type OleoCardOnChangePayload } from "../components/contagem/OleoCard";
 import ActionsFooter from "../components/layout/ActionsFooter";
 import { useInventarioDoDia } from "../hooks/useInventarioDoDia";
+import { ApiError, fecharInventario, limparItensDoDia } from "../api/inventarios";
+import { dataLocalHoje } from "../utils/data";
 
 interface ContagemPageProps {
   data: string;
   onDataChange: (data: string) => void;
+}
+
+/** Ação aguardando confirmação no ConfirmDialog (RNF02: nada de confirm() nativo). */
+interface Confirmacao {
+  mensagem: string;
+  executar: () => Promise<void>;
 }
 
 function formatarHorario(momento: Date | null): string | null {
@@ -24,12 +34,18 @@ export default function ContagemPage({ data, onDataChange }: ContagemPageProps) 
     carregando,
     erroCarregamento,
     atualizarItem,
+    recarregar,
     statusSalvamento,
     ultimoSalvoEm,
   } = useInventarioDoDia(data);
 
   const [search, setSearch] = useState("");
-  const [avisoAcaoFutura, setAvisoAcaoFutura] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
+  const [confirmacao, setConfirmacao] = useState<Confirmacao | null>(null);
+  const [executandoAcao, setExecutandoAcao] = useState(false);
+
+  const diaFechado = inventario?.status === "fechado";
+  const diaSemLancamentos = inventario?.status === "nao_iniciado";
 
   const oleos = inventario?.oleos ?? [];
 
@@ -48,12 +64,72 @@ export default function ContagemPage({ data, onDataChange }: ContagemPageProps) 
     atualizarItem(itemId, patch);
   };
 
+  const executarAcao = async (acao: () => Promise<void>) => {
+    setExecutandoAcao(true);
+    try {
+      await acao();
+    } catch (e) {
+      setAviso(
+        e instanceof ApiError ? e.message : "Não foi possível concluir a ação. Tente de novo."
+      );
+    } finally {
+      setExecutandoAcao(false);
+    }
+  };
+
+  // RN19: fechar (ou re-fechar, após uma correção) sempre passa por uma
+  // confirmação explícita antes de gravar.
+  const handleSalvarDia = () => {
+    if (diaSemLancamentos) {
+      setAviso("Nada foi lançado nesse dia ainda — não há contagem para salvar.");
+      return;
+    }
+    setConfirmacao({
+      mensagem: diaFechado
+        ? "Esse dia já tem uma contagem salva. Deseja substituí-la pelos valores atuais?"
+        : "Confirma fechar a contagem desse dia?",
+      executar: async () => {
+        await fecharInventario(data);
+        await recarregar();
+      },
+    });
+  };
+
+  // "Nova contagem" (RF22, RN21). Decisão de 2026-08-03: num dia já fechado
+  // o aviso é mais forte, porque a ação apaga uma contagem consolidada.
+  const handleNovaContagem = () => {
+    if (diaSemLancamentos) {
+      setAviso("Nada foi lançado nesse dia ainda — não há o que limpar.");
+      return;
+    }
+    setConfirmacao({
+      mensagem: diaFechado
+        ? "Atenção: esse dia já está fechado. Começar uma nova contagem apaga os valores já salvos dele. As quantidades de sistema são mantidas, mas as quantidades contadas serão perdidas. Deseja continuar?"
+        : "Isso vai limpar os valores lançados nesse dia. Deseja continuar?",
+      executar: async () => {
+        await limparItensDoDia(data);
+        await recarregar();
+      },
+    });
+  };
+
+  const handleConfirmar = () => {
+    const pendente = confirmacao;
+    setConfirmacao(null);
+    if (pendente) void executarAcao(pendente.executar);
+  };
+
   return (
     <div className="page contagem-page">
       <div className="page-header">
         <DateSelector data={data} onDataChange={onDataChange} />
         <SaveStatusIndicator estado={statusSalvamento} horario={formatarHorario(ultimoSalvoEm)} />
       </div>
+
+      <EditingBanner
+        dataEditando={diaFechado ? data : null}
+        onCancelar={() => onDataChange(dataLocalHoje())}
+      />
 
       <SearchInput value={search} onChange={setSearch} placeholder="Buscar óleo ou graxa" />
 
@@ -83,16 +159,19 @@ export default function ContagemPage({ data, onDataChange }: ContagemPageProps) 
       </div>
 
       <ActionsFooter
-        onSave={() => setAvisoAcaoFutura("Fechar a contagem do dia ainda não foi implementado nesta versão.")}
-        onNewCount={() => setAvisoAcaoFutura("\"Nova contagem\" ainda não foi implementado nesta versão.")}
-        saving={false}
+        onSave={handleSalvarDia}
+        onNewCount={handleNovaContagem}
+        saving={executandoAcao}
       />
 
-      <AlertDialog
-        aberto={avisoAcaoFutura !== null}
-        mensagem={avisoAcaoFutura ?? ""}
-        onFechar={() => setAvisoAcaoFutura(null)}
+      <ConfirmDialog
+        aberto={confirmacao !== null}
+        mensagem={confirmacao?.mensagem ?? ""}
+        onConfirmar={handleConfirmar}
+        onCancelar={() => setConfirmacao(null)}
       />
+
+      <AlertDialog aberto={aviso !== null} mensagem={aviso ?? ""} onFechar={() => setAviso(null)} />
     </div>
   );
 }

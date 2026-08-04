@@ -237,6 +237,32 @@ body {
   color: #991b1b;
 }
 
+.editing-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid #fcd34d;
+  border-left: 4px solid #d97706;
+  border-radius: 0.5rem;
+  background: #fffbeb;
+  color: #92400e;
+  font-weight: 600;
+}
+
+.editing-banner button {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #d97706;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: #92400e;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 .dialog-overlay {
   position: fixed;
   inset: 0;

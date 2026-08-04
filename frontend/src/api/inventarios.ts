@@ -55,6 +55,12 @@ export interface InventarioDoDia {
   pecas: ItemPeca[];
 }
 
+export interface InventarioFechado {
+  data: string;
+  status: "fechado";
+  fechado_em: string;
+}
+
 export interface PatchItemOleoPayload {
   estoque?: number;
   oficina?: number;
@@ -133,4 +139,39 @@ export async function patchItem(
   }
 
   return (await response.json()) as ItemOleoOuGraxa | ItemPeca;
+}
+
+/**
+ * Fecha (ou re-fecha) a contagem do dia — botão "Salvar contagem do dia".
+ * POST /api/v1/inventarios/{data}/fechar
+ * O `fechado_em` devolvido é sempre o do primeiro fechamento (RN18).
+ */
+export async function fecharInventario(data: string): Promise<InventarioFechado> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/inventarios/${data}/fechar`, {
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    await parseErroOuLancar(response);
+  }
+
+  return (await response.json()) as InventarioFechado;
+}
+
+/**
+ * "Nova contagem" — limpa os lançamentos do dia selecionado (RF22, RN21).
+ * DELETE /api/v1/inventarios/{data}/itens
+ * Óleos/graxas mantêm `quantidade_sistema` (RN27) e só têm o físico zerado;
+ * peças são removidas. Devolve o inventário já limpo.
+ */
+export async function limparItensDoDia(data: string): Promise<InventarioDoDia> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/inventarios/${data}/itens`, {
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    await parseErroOuLancar(response);
+  }
+
+  return (await response.json()) as InventarioDoDia;
 }
