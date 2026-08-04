@@ -25,9 +25,13 @@ docker compose up --build
 
 E confirme especificamente:
 
-- [ ] Os três serviços (`db`, `backend`, `frontend`) sobem sem erro
-      (ver checkbox pendente no Sprint 0).
-- [ ] `alembic upgrade head` roda contra o Postgres real sem erro.
+- [x] Os três serviços (`db`, `backend`, `frontend`) sobem sem erro
+      (ver checkbox pendente no Sprint 0). **Exigiu duas correções** —
+      ver log de decisões (`tsconfig.node.json` sem `composite`, e
+      `frontend` sem `build.target` no override).
+- [x] `alembic upgrade head` roda contra o Postgres real sem erro.
+      **Exigiu duas correções** de caminho (`script_location` e o
+      `sys.path` do `env.py`) — ver log de decisões.
 - [ ] **Ordem seed vs. migração:** `backend/app/seed_items.py` chama
       `Base.metadata.create_all(bind=engine)` antes de popular o catálogo.
       As colunas geradas `diferenca`/`status` só existem de fato via
@@ -41,12 +45,63 @@ E confirme especificamente:
       (rodar `alembic upgrade head` antes do seed) — **não decidido ainda,
       confirmar com a pessoa antes de mexer**, pois se conecta ao ponto em
       aberto do Sprint 7 sobre onde as migrações rodam em produção.
-- [ ] `GET /api/v1/inventarios/{data}` para uma data nova retorna o
+- [x] **Verificado em 2026-08-03:** `diferenca` e `status` aparecem como
+      `GENERATED ALWAYS` em `inventario_itens`, e o cálculo foi conferido
+      na prática (físico 5 / sistema 0 → `diferenca 5`, `status sobra`).
+      **Porém nada no `docker-compose` roda migração nem seed** — o banco
+      subiu completamente vazio e ambos tiveram que ser rodados à mão.
+      A ordem correta (Alembic antes do seed) ainda não está automatizada;
+      continua sendo o ponto em aberto do Sprint 7.
+- [x] `GET /api/v1/inventarios/{data}` para uma data nova retorna o
       catálogo correto de óleos/graxas (valida a correção do
-      `seed_items.py`).
-- [ ] `npm install` + build do `frontend/` completam sem erro.
-- [ ] Frontend consegue chamar a API sem erro de CORS (valida a correção
-      do `.split(",")` em `backend/app/main.py`).
+      `seed_items.py`). **Verificado:** 11 itens (9 óleos + 2 graxas),
+      `status: "nao_iniciado"`, e sem escrita no banco (regra 5 do
+      `CLAUDE.md` confirmada).
+- [x] `npm install` + build do `frontend/` completam sem erro
+      (após a correção do `tsconfig.node.json`).
+- [x] Frontend consegue chamar a API sem erro de CORS (valida a correção
+      do `.split(",")` em `backend/app/main.py`). **Verificado no nível do
+      header:** requisição com `Origin: http://localhost:5173` responde
+      `access-control-allow-origin` correto. **Também confirmado pela UI
+      real:** a tela de Contagem carrega os 11 itens e o autosave grava,
+      ambos via `fetch` do navegador em `localhost:5173` → `localhost:8000`.
+
+### 🐛 Bug encontrado durante a validação — CORRIGIDO em 2026-08-03
+
+- [x] **`GET /inventarios/{data}` no caminho "dia existe" devolve só os
+      itens que já têm linha em `inventario_itens`, não o catálogo fixo.**
+      Reproduzido: num dia novo o GET devolve 11 óleos; após um único
+      PATCH, passa a devolver **1**. Na tela de Contagem isso faz os
+      outros 10 óleos sumirem ao recarregar a página.
+      Causa: `backend/app/routers/inventarios.py` linha ~189 parte de
+      `select(InventarioItem).join(Item)`, enquanto o caminho
+      "nao_iniciado" (linha ~146) parte do catálogo completo. O caminho
+      "existe" precisa partir do catálogo de óleos/graxas e fazer
+      `LEFT JOIN` com as linhas existentes. Peças seguem só as que existem
+      (vêm do XML).
+      **Correção aplicada:** os dois caminhos agora partem do mesmo
+      catálogo (`catalogo_oleos_graxas`) e da mesma herança RN27
+      (`ultimas_quantidades_sistema_fechadas`), que estavam duplicados
+      inline e foi essa duplicação que deixou um caminho para trás.
+      Verificado: dia com rascunho volta a devolver 11 óleos, e o item
+      editado preserva o valor.
+
+- [x] **A data inicial da tela usa UTC, não a data local.** — CORRIGIDO em 2026-08-03.
+      `frontend/src/App.tsx` linha 10 faz
+      `new Date().toISOString().slice(0, 10)`, e `toISOString()` sempre
+      converte para UTC. No horário de Brasília (UTC-3), a partir das 21h
+      o app abre **no dia seguinte**. Observado na prática durante a
+      validação: às 22h de 2026-08-03 a tela abriu em 2026-08-04 e o
+      autosave criou o rascunho na data errada. Contagem feita à noite
+      cairia no dia errado. Correção: montar a string a partir dos
+      componentes locais (`getFullYear`/`getMonth`/`getDate`) em vez de
+      `toISOString()`.
+      **Correção aplicada:** criado `frontend/src/utils/data.ts` com
+      `dataLocalHoje()` e `formatarDataISO()`, e `App.tsx` passou a usar o
+      helper. Verificado no navegador (fuso `America/Sao_Paulo`, às 22h de
+      2026-08-03): a tela abre em 2026-08-03, não mais em 2026-08-04.
+      **Use esses helpers em qualquer data nova** (Sprint 3 "Nova
+      contagem", Sprint 5 Histórico) em vez de `toISOString()`.
 
 ---
 
@@ -58,7 +113,7 @@ E confirme especificamente:
 - [x] Criar migração Alembic inicial: tabelas `itens`, `inventarios`, `inventario_itens`, `importacoes_xml` (`docs/banco-de-dados.md`)
 - [x] Seed do catálogo fixo (9 óleos + 2 graxas) em `itens`
 - [x] `docker-compose.yml` + `docker-compose.override.yml` + `.env.example` (`docs/docker-compose.md`)
-- [ ] Confirmar que `docker compose up` sobe os três serviços (`db`, `backend`, `frontend`) sem erro
+- [x] Confirmar que `docker compose up` sobe os três serviços (`db`, `backend`, `frontend`) sem erro — verificado em 2026-08-03, após as correções registradas no log de decisões
 
 **Dependências:** nenhuma — é o ponto de partida.
 **Não avançar para o Sprint 1 sem isso funcionando.**
@@ -158,7 +213,13 @@ padrão do histórico (`docs/document-rest-API.md` seção 8).
 - [x] Frontend: `OleoCard` completo, ligado ao PATCH via autosave
 - [x] Frontend: `ContagemPage` montada (Header + DateSelector + SummaryBar + lista de OleoCard + ActionsFooter)
 - [x] Frontend: `SaveStatusIndicator` refletindo sucesso/falha real da chamada HTTP
-- [ ] Teste manual: editar um óleo, recarregar a página, confirmar que o valor persistiu
+- [x] Teste manual: editar um óleo, recarregar a página, confirmar que o valor persistiu
+      — **verificado no navegador em 2026-08-03**, após a correção do bug do GET
+      registrado no topo deste arquivo. Digitado Estoque 4 + Oficina 3 no card do E7
+      (`45-3247280`); o autosave criou o rascunho do dia (RN16) e gravou
+      `quantidade_fisica = 7` com `status = sobra` (diferença calculada pela coluna
+      gerada do Postgres, RN01–RN03). Após recarregar, a tela voltou com os 11 óleos,
+      o E7 com 4/3/7 e o resumo em `Sobra 1 / Correto 10`.
 
 **Dependências:** Sprint 1 (reaproveita a lógica de "criar inventário do dia se não existir" do `GET`).
 
@@ -348,3 +409,61 @@ seguro uma pessoa/uma sessão só levar do início ao fim.
   sucesso, e leitura de código comparada aos documentos de `docs/`. A
   verificação final de ponta a ponta depende da pessoa rodar
   `docker compose up` na própria máquina → 2026-08-03.
+- [Sprint 0] `frontend/tsconfig.node.json` era referenciado por
+  `tsconfig.json` (`references`) mas não tinha `"composite": true`,
+  quebrando `npm run build` com `TS6306` e derrubando o build da imagem →
+  adicionado `"composite": true` e `"skipLibCheck": true`, alinhando com o
+  template padrão do Vite (bug técnico, não decisão de negócio)
+  → 2026-08-03.
+- [Sprint 0] `frontend/Dockerfile` é multi-stage terminando no estágio
+  `production` (Nginx), mas o `docker-compose.override.yml` mandava rodar
+  `npm run dev` — o contêiner morria com `npm: not found` (exit 127) →
+  adicionado `build.target: build` ao serviço `frontend` no override, que
+  é exatamente o comportamento que `docs/docker-compose.md` seção 7
+  descreve ("rodar o frontend no modo Vite em vez do build de produção")
+  → 2026-08-03.
+- [Sprint 0] `backend/alembic.ini` tinha `script_location = backend/alembic`,
+  caminho válido só a partir da raiz do repositório; dentro do contêiner o
+  `WORKDIR` já é o próprio `backend/` (`/app`), então o Alembic falhava com
+  `Path doesn't exist: '/app/backend/alembic'` → corrigido para
+  `script_location = alembic` (layout padrão do Alembic, relativo ao
+  `alembic.ini`) → 2026-08-03.
+- [Sprint 0] `backend/alembic/env.py` montava o `sys.path` com
+  `os.path.join(config.config_file_name, "..", "..")`, que resolve para `/`
+  em vez de `/app`, causando `ModuleNotFoundError: No module named
+  'app.database'` → corrigido para
+  `sys.path.insert(0, os.path.dirname(os.path.abspath(config.config_file_name)))`
+  → 2026-08-03.
+- [Sprint 0] Não existia `.env` na raiz, só `.env.example`. O Compose
+  interpola `$POSTGRES_USER` (healthcheck do `db`) e `${POSTGRES_USER}`
+  (`DATABASE_URL` do `.env.example`) a partir de um `.env` na raiz, que não
+  existia → criado `.env` local (já coberto pelo `.gitignore`) a partir do
+  `.env.example`. **Fica em aberto** se o `docker-compose.yml` deveria
+  apontar `env_file` para `.env` em vez de `.env.example`, que é o mais
+  convencional → 2026-08-03.
+- [Sprint 1] `GET /inventarios/{data}` montava a resposta de duas formas
+  diferentes: o caminho "nao_iniciado" partia do catálogo fixo, o caminho
+  "dia existe" partia só das linhas de `inventario_itens`. Resultado: após
+  o primeiro autosave, a tela de Contagem perdia 10 dos 11 óleos ao
+  recarregar (bug técnico, não decisão de negócio) → extraídos
+  `catalogo_oleos_graxas`, `ultimas_quantidades_sistema_fechadas` e
+  `montar_item_sem_linha`, usados agora pelos dois caminhos. Óleos/graxas
+  sempre saem do catálogo completo; peças continuam vindo só do que existe
+  no dia (RN12/RN13). Itens do catálogo sem linha herdam
+  `quantidade_sistema` do último fechamento (RN27), e a busca desse último
+  fechamento exclui o próprio inventário do dia, para um dia já fechado não
+  herdar de si mesmo → 2026-08-03.
+- [Sprint 2] `App.tsx` inicializava a data com
+  `new Date().toISOString().slice(0, 10)`, que devolve a data em UTC: no
+  horário de Brasília, das 21h em diante o sistema abria no dia seguinte
+  (bug técnico, não decisão de negócio) → criado
+  `frontend/src/utils/data.ts` com `dataLocalHoje()` e `formatarDataISO()`,
+  usando os componentes locais do `Date`. O helper existe para que o mesmo
+  erro não se repita nas telas que ainda vão manipular datas
+  → 2026-08-03.
+- [Infra/dev] O bind mount do Windows não propaga eventos de arquivo para
+  o contêiner, então o HMR do Vite não recompila sozinho ao editar
+  `frontend/src/` — foi preciso `docker compose restart frontend` para ver
+  a mudança. Não corrigido (não afeta o produto, só o ciclo de
+  desenvolvimento). Se incomodar, a saída usual é
+  `server.watch.usePolling: true` no `vite.config.ts` → 2026-08-03.

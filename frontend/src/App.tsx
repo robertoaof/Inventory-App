@@ -5,9 +5,10 @@ import TabNav from "./components/layout/TabNav";
 import ContagemPage from "./pages/ContagemPage";
 import InventariosPage from "./pages/InventariosPage";
 import HistoricoPage from "./pages/HistoricoPage";
+import { dataLocalHoje } from "./utils/data";
 
 function App() {
-  const [data, setData] = useState(new Date().toISOString().slice(0, 10));
+  const [data, setData] = useState(dataLocalHoje());
 
   return (
     <BrowserRouter>

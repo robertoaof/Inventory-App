@@ -8,7 +8,7 @@ from alembic import context
 config = context.config
 fileConfig(config.config_file_name)
 
-sys.path.append(os.path.abspath(os.path.join(config.config_file_name, "..", "..")))
+sys.path.insert(0, os.path.dirname(os.path.abspath(config.config_file_name)))
 
 from app.database import DATABASE_URL
 from app.models import Base  # noqa: E402

@@ -80,6 +80,55 @@ def montar_item(item: Item, inventario_item: Optional[InventarioItem] = None) ->
     return objeto
 
 
+def catalogo_oleos_graxas(db: Session) -> List[Item]:
+    """Catálogo fixo de óleos e graxas (RN27). A tela de Contagem sempre
+    mostra todos, tendo o dia linha em `inventario_itens` ou não."""
+    return list(
+        db.scalars(
+            select(Item)
+            .where(Item.categoria.in_(["oleo", "graxa"]), Item.ativo == True)
+            .order_by(Item.codigo)
+        ).all()
+    )
+
+
+def ultimas_quantidades_sistema_fechadas(
+    db: Session,
+    item_ids: List[int],
+    excluir_inventario_id: Optional[int] = None,
+) -> Dict[int, int]:
+    """RN27: último `quantidade_sistema` fechado de cada item (0 se o item
+    nunca apareceu num inventário fechado). Vale tanto para o dia ainda não
+    iniciado quanto para itens do catálogo sem linha num dia já existente."""
+    if not item_ids:
+        return {}
+
+    stmt = (
+        select(InventarioItem.item_id, InventarioItem.quantidade_sistema)
+        .join(Inventario, Inventario.id == InventarioItem.inventario_id)
+        .where(Inventario.status == "fechado", InventarioItem.item_id.in_(item_ids))
+        .order_by(Inventario.data.desc())
+    )
+    if excluir_inventario_id is not None:
+        stmt = stmt.where(Inventario.id != excluir_inventario_id)
+
+    ultimo_por_item: Dict[int, int] = {}
+    for item_id, quantidade_sistema in db.execute(stmt).all():
+        if item_id not in ultimo_por_item:
+            ultimo_por_item[item_id] = quantidade_sistema
+    return ultimo_por_item
+
+
+def montar_item_sem_linha(item: Item, quantidade_sistema: int) -> Dict:
+    """Item do catálogo que ainda não foi tocado no dia: físico zerado e
+    sistema herdado do último fechamento (RN27)."""
+    objeto = montar_item(item)
+    objeto["quantidade_sistema"] = quantidade_sistema
+    objeto["diferenca"] = -quantidade_sistema
+    objeto["status"] = "correto" if quantidade_sistema == 0 else "falta"
+    return objeto
+
+
 @router.get("", response_model=InventarioListResponse)
 def list_inventarios(
     status: Optional[str] = Query(None, regex="^(rascunho|fechado)$"),
@@ -138,42 +187,17 @@ def get_inventario(data: str, db: Session = Depends(get_db)):
     if data_obj is None:
         return erro("data_invalida", "Formato de data inválido. Use AAAA-MM-DD.", 400)
 
+    catalogo = catalogo_oleos_graxas(db)
+
     inventario = db.scalar(select(Inventario).where(Inventario.data == data_obj))
     if inventario is None:
-        itens = db.scalars(select(Item).where(Item.categoria.in_(["oleo", "graxa"]), Item.ativo == True).order_by(Item.codigo)).all()
-        item_ids = [item.id for item in itens]
-        ultimo_query = (
-            select(InventarioItem.item_id, InventarioItem.quantidade_sistema)
-            .join(Inventario, Inventario.id == InventarioItem.inventario_id)
-            .where(Inventario.status == "fechado", InventarioItem.item_id.in_(item_ids))
-            .order_by(Inventario.data.desc())
+        ultimo_por_item = ultimas_quantidades_sistema_fechadas(
+            db, [item.id for item in catalogo]
         )
-        ultimo_rows = db.execute(ultimo_query).all()
-        ultimo_por_item: Dict[int, int] = {}
-        for item_id, quantidade_sistema in ultimo_rows:
-            if item_id not in ultimo_por_item:
-                ultimo_por_item[item_id] = quantidade_sistema
-
-        oleos = []
-        for item in itens:
-            quantidade_sistema = ultimo_por_item.get(item.id, 0)
-            status = "correto" if quantidade_sistema == 0 else "falta"
-            oleos.append(
-                {
-                    "item_id": item.id,
-                    "codigo": item.codigo,
-                    "descricao": item.descricao,
-                    "categoria": item.categoria,
-                    "possui_quebra_estoque_oficina": item.possui_quebra_estoque_oficina,
-                    "estoque": None,
-                    "oficina": None,
-                    "quantidade_fisica": 0,
-                    "quantidade_sistema": quantidade_sistema,
-                    "diferenca": -quantidade_sistema,
-                    "status": status,
-                    "observacao": None,
-                }
-            )
+        oleos = [
+            montar_item_sem_linha(item, ultimo_por_item.get(item.id, 0))
+            for item in catalogo
+        ]
 
         return {
             "data": data_obj,
@@ -191,15 +215,38 @@ def get_inventario(data: str, db: Session = Depends(get_db)):
         .where(InventarioItem.inventario_id == inventario.id)
     )
     inventario_rows = db.execute(inventario_items_query).all()
+    linhas_por_item = {
+        inventario_item.item_id: (inventario_item, item)
+        for inventario_item, item in inventario_rows
+    }
+
+    # Óleos e graxas saem sempre do catálogo fixo: o dia pode ter linha para
+    # alguns itens e nenhuma para os outros, e a tela precisa dos 11 mesmo
+    # assim. Os que não têm linha herdam o sistema do último fechamento.
+    ids_sem_linha = [item.id for item in catalogo if item.id not in linhas_por_item]
+    ultimo_por_item = ultimas_quantidades_sistema_fechadas(
+        db, ids_sem_linha, excluir_inventario_id=inventario.id
+    )
 
     oleos = []
+    for item in catalogo:
+        par = linhas_por_item.get(item.id)
+        if par is None:
+            oleos.append(montar_item_sem_linha(item, ultimo_por_item.get(item.id, 0)))
+        else:
+            oleos.append(montar_item(item, par[0]))
+
+    # Peças vêm só do que existe no dia (são importadas de XML, RN12/RN13).
+    # Óleos/graxas fora do catálogo (item desativado, por exemplo) continuam
+    # aparecendo se tiverem linha, para não sumir dado já contado.
+    ids_catalogo = {item.id for item in catalogo}
     pecas = []
     for inventario_item, item in inventario_rows:
-        elemento = montar_item(item, inventario_item)
         if item.categoria in ("oleo", "graxa"):
-            oleos.append(elemento)
+            if item.id not in ids_catalogo:
+                oleos.append(montar_item(item, inventario_item))
         else:
-            pecas.append(elemento)
+            pecas.append(montar_item(item, inventario_item))
 
     return {
         "data": inventario.data,
