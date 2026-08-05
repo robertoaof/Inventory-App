@@ -162,6 +162,8 @@ export default function ContagemPage({ data, onDataChange }: ContagemPageProps) 
         onSave={handleSalvarDia}
         onNewCount={handleNovaContagem}
         saving={executandoAcao}
+        data={data}
+        inventario={inventario}
       />
 
       <ConfirmDialog

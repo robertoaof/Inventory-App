@@ -269,8 +269,8 @@ A aba Histórico lista os inventários com status **fechado**, do mais
 recente para o mais antigo, cada um com um resumo rápido de quantos itens
 estão corretos/sobrando/faltando naquele dia. Inventários que ficaram parados
 em rascunho (o usuário começou a digitar mas nunca clicou em "Salvar
-contagem do dia") não aparecem nessa lista por padrão — isso é um ponto em
-aberto (ver seção 8). *(Relacionado: RF20)*
+contagem do dia") **não aparecem nessa lista** — decisão confirmada em
+2026-08-05 (ver seção 8, que registrava isso como ponto em aberto). *(Relacionado: RF20)*
 
 ### RN26 — Abrir um dia do histórico
 Abrir um dia a partir do Histórico carrega os dados daquele inventário
@@ -282,10 +282,11 @@ usuário decidir salvar novamente. *(Relacionado: RF21)*
 
 ## 8. Pontos em aberto (ainda sem regra definida)
 
-- **Rascunhos esquecidos.** Um dia pode ficar indefinidamente em status
-  "rascunho" se o usuário nunca clicar em salvar. Ainda não decidimos se
-  isso deveria aparecer de alguma forma no Histórico (com um indicador
-  "não fechado"), ou se é aceitável que fique invisível até ser retomado.
+- ~~**Rascunhos esquecidos.**~~ **Resolvido em 2026-08-05:** rascunhos nunca
+  fechados não aparecem no Histórico (RN25). Um dia pode ficar
+  indefinidamente em status "rascunho" se o usuário nunca clicar em salvar
+  — fica invisível na lista até ser retomado (via a mesma data na aba
+  Contagem) ou fechado.
 - **Limite de tempo para reabrir um dia.** RN19 permite reabrir qualquer
   dia fechado, sem prazo. Não foi discutido se deveria existir um limite
   (por exemplo, não permitir corrigir um inventário de mais de X meses

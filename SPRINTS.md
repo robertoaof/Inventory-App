@@ -173,8 +173,8 @@ interdependência real dentro do próprio sprint.
 - [x] `SearchInput`, `ObservacaoInput`
 
 **Dependências:** Sprint 0.
-**Decisão a confirmar antes de fechar este sprint:** tamanho de página
-padrão do histórico (`docs/document-rest-API.md` seção 8).
+**Decisão confirmada em 2026-08-05:** tamanho de página padrão do histórico
+= 30 (`docs/document-rest-API.md` seção 8).
 
 > **Nota de verificação:** implementação já existente, auditada nesta
 > sessão. O código em `backend/app/routers/inventarios.py` implementa os
@@ -468,12 +468,64 @@ seguro uma pessoa/uma sessão só levar do início ao fim.
 
 ## Sprint 6 — Impressão e polimento
 
-- [ ] Frontend: `PrintInventoryButton` (busca dados do dia antes de montar o HTML de impressão)
-- [ ] Revisão de consistência visual (RNF01) entre as três telas
-- [ ] Revisão de acessibilidade básica dos modais (`ConfirmDialog`/`AlertDialog`)
-- [ ] `GET /inventarios/{data}/importacoes` consumido de fato em alguma tela (hoje só existe a rota)
+- [x] Frontend: `PrintInventoryButton` (busca dados do dia antes de montar o HTML de impressão)
+- [x] Revisão de consistência visual (RNF01) entre as três telas
+- [x] Revisão de acessibilidade básica dos modais (`ConfirmDialog`/`AlertDialog`)
+- [x] `GET /inventarios/{data}/importacoes` consumido de fato em alguma tela (hoje só existe a rota)
+- [x] Backend: trocar `xml.etree.ElementTree` por `defusedxml` na importação de XML
+      (`backend/app/routers/inventarios.py:3` e `:490`) — fecha a nota de segurança
+      aberta no Sprint 4. `EntitiesForbidden` deve sair como `422`, junto com o XML
+      mal formado.
+- [x] Backend: limitar o tamanho do upload aceito em `POST /inventarios/{data}/importacoes`
+      — hoje o arquivo é lido inteiro para memória antes de qualquer validação, então
+      um XML legítimo grande derruba o backend sem precisar de entidade nenhuma.
+      **Confirmado pela pessoa em 2026-08-05: 10 MB**, com `422` no envelope de erro
+      padrão (código `arquivo_muito_grande`).
 
 **Dependências:** Sprints 1–5.
+
+> **Nota de verificação (2026-08-05):** todo o código deste sprint já existia no
+> repositório antes desta sessão (não commitado), mas nenhum checkbox tinha sido
+> marcado nem verificado. Auditei e testei tudo contra o ambiente Docker real
+> (`docker compose up --build -d`, os três serviços sobem sem erro):
+> - **`npm run build`** (`tsc && vite build`) passa sem erro de tipo.
+> - **Ataque de expansão de entidade ("billion laughs"):** arquivo de teste com
+>   4 níveis de aninhamento → `422 xml_entidade_proibida`, confirmando que
+>   `defusedxml` bloqueia antes de qualquer expansão. Importação de XML válido
+>   normal continua funcionando após o refactor da leitura em pedaços.
+> - **Limite de upload:** arquivo de 11 MB → `422 arquivo_muito_grande`; a leitura
+>   em pedaços aborta assim que ultrapassa o limite, sem terminar de consumir o
+>   arquivo inteiro na memória.
+> - **Frontend, via Playwright headless** (`chromium-cli` não disponível nesta
+>   máquina, usado `playwright` diretamente): botão de impressão presente no
+>   rodapé de Contagem e Inventários, sem erro de console ao clicar; seção
+>   "Importações deste dia" renderiza em Inventários; `ConfirmDialog` — foco
+>   inicial vai para "Cancelar", Tab/Shift+Tab ficam presos dentro do modal
+>   (confirmado o wrap Cancelar → Confirmar → Cancelar), `Escape` fecha o modal.
+>   Zero erros de console em nenhuma das interações.
+> - **Consistência visual (RNF01):** Header/TabNav são estruturalmente
+>   compartilhados pelas três páginas (`App.tsx`); `SummaryBar` já foi unificado
+>   entre Contagem/Inventários/Histórico no Sprint 5; `PrintInventoryButton` usa
+>   o mesmo estilo "outline" secundário nas duas telas onde aparece, para não
+>   competir com os botões primários de `ActionsFooter`. Nenhuma divergência
+>   encontrada nas três telas (capturas de tela comparadas lado a lado).
+> - Dados de teste (importação, peça de catálogo e o rascunho do dia usado nos
+>   testes) foram limpos do Postgres ao final — o banco voltou ao estado exato
+>   de antes da verificação.
+>
+> **Achado não relacionado ao Sprint 6:** o volume do Postgres local não tinha
+> mais nenhum dia fechado (`Histórico` mostrou "Nenhum dia fechado ainda"),
+> embora o catálogo de 11 itens seguisse semeado — ou seja, o banco foi
+> resetado (ex.: `docker compose down -v`) e as migrações/seed foram
+> reaplicados manualmente em algum momento entre 2026-08-04 e esta sessão, fora
+> do fluxo do Sprint 6. Não é um bug de código; só um aviso para não estranhar
+> o Histórico vazio na próxima verificação manual.
+>
+> **`.gitignore` estava deletado no working tree** (não commitado) quando esta
+> sessão começou — `__pycache__/`, `node_modules/`, `dist/` e `.env` apareciam
+> como untracked em `git status`. Restaurado (`git checkout -- .gitignore`)
+> por ser claramente acidental (o arquivo nunca foi alterado desde o commit
+> inicial); nenhuma decisão de negócio dependia disso.
 
 ---
 
@@ -666,6 +718,39 @@ seguro uma pessoa/uma sessão só levar do início ao fim.
   Não corrigido de imediato porque é correção de backend surgida num sprint
   de frontend; **decisão da pessoa** sobre corrigir agora ou abrir como item
   do Sprint 6 → 2026-08-04.
+- [Sprint 1] **Decisão confirmada pela pessoa em 2026-08-05:** tamanho de
+  página padrão do histórico = **30**. Já estava implementado dos dois lados
+  desde o Sprint 1/5; ficava só a confirmação formal pendente
+  (`docs/document-rest-API.md` seção 8 tratava como sugestão, não decisão).
+- [Sprint 0] **Ponto em aberto resolvido pela pessoa em 2026-08-05:**
+  `docker-compose.yml` apontava `env_file` para `.env.example` — trocado para
+  `.env` (o convencional; `.env` já existe localmente desde o Sprint 0 e já
+  está no `.gitignore`). Serviços `db` e `backend` ajustados.
+- [Sprint 5/RN25] **Ponto em aberto de `docs/regras-de-negocios.md` seção 8
+  resolvido pela pessoa em 2026-08-05:** rascunhos nunca fechados **não**
+  aparecem no Histórico. Nenhuma mudança de código foi necessária — o backend
+  (`GET /inventarios`) já filtrava `status == "fechado"` por padrão quando
+  `?status=` não é informado; só faltava fechar a decisão no documento (RN25
+  e seção 8 atualizadas em `docs/regras-de-negocios.md`).
+- [Sprint 4→6] **Nota de segurança do Sprint 4 resolvida como decisão:** trocar
+  `xml.etree.ElementTree` por `defusedxml` → **sim, decidido pela pessoa em
+  2026-08-05**, agendado como tarefa do Sprint 6. Confirmado experimentalmente
+  nesta máquina que o `ElementTree` do Python **expande entidades internas** (um
+  XML de ~400 bytes com 4 níveis de aninhamento gerou 30.000 caracteres; com 9
+  níveis seriam ~3 GB — o "billion laughs"), e que o vetor está exposto em
+  `POST /inventarios/{data}/importacoes`, antes de qualquer validação de negócio.
+  O `ElementTree` **não** resolve entidades externas (levanta `ParseError`), então
+  não há exposição a XXE — o risco é exclusivamente de negação de serviço.
+  Risco real hoje é baixo (sistema interno, sem autenticação, `requisitos.md`
+  seção 3), mas o custo da correção é uma dependência + um import, e ela protege
+  também o caso não-malicioso de um arquivo corrompido → 2026-08-05.
+- [Sprint 6] **Decisão confirmada pela pessoa em 2026-08-05:** tamanho máximo do
+  upload de XML = **10 MB**. Nenhum documento de `docs/` definia um limite, e o
+  `defusedxml` sozinho não cobre esse caso (um XML válido de centenas de MB tem
+  o mesmo efeito de um malicioso, já que o corpo seria lido inteiro para
+  memória). Implementado com leitura em pedaços de 1 MB, abortando assim que
+  ultrapassa o limite — `422 arquivo_muito_grande`, sem terminar de consumir o
+  arquivo inteiro. Testado nesta sessão com um arquivo de 11 MB.
 - [Infra/dev] O ambiente **desta máquina tem Docker e Node disponíveis**
   (Docker 29.6.2 / Compose v5.3.1, Node v26.5.0 / npm 11.17.0), ao contrário
   do que as notas dos Sprints 0–2 registravam sobre as sandboxes de agente.

@@ -80,10 +80,18 @@ body {
 
 .actions-footer {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.actions-footer-principal {
+  display: flex;
   gap: 1rem;
 }
 
-.actions-footer button {
+.actions-footer-principal button {
   padding: 0.75rem 1rem;
   border: none;
   border-radius: 0.5rem;
@@ -92,9 +100,131 @@ body {
   cursor: pointer;
 }
 
-.actions-footer button:disabled {
+.actions-footer-principal button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/*
+ * Impressão (`PrintInventoryButton`) é uma ação secundária em relação a
+ * "Salvar contagem"/"Nova contagem" — usa o mesmo estilo "outline" já
+ * estabelecido em `.historico-carregar-mais button`, em vez do preenchido
+ * azul-escuro das ações primárias, para não competir visualmente com elas
+ * (RNF01: mesma paleta/hierarquia em toda a aplicação).
+ */
+.print-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.print-actions button {
+  padding: 0.6rem 1rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  background: white;
+  color: #111827;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.print-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/*
+ * Área de impressão: fica fora do fluxo normal (`display:none`) e só é
+ * exibida quando o navegador está de fato imprimindo (`@media print`),
+ * espelhando o comportamento do protótipo (`#area-impressao` em
+ * contagem_oleo.html). Conteúdo é injetado dinamicamente pelo
+ * `PrintInventoryButton`.
+ */
+#area-impressao {
+  display: none;
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  #area-impressao,
+  #area-impressao * {
+    visibility: visible;
+  }
+
+  #area-impressao {
+    display: block !important;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    background: #fff;
+    color: #000;
+    font-family: Arial, Helvetica, sans-serif;
+    padding: 0;
+  }
+
+  .dialog-overlay {
+    display: none !important;
+  }
+
+  .imp-header {
+    text-align: center;
+    margin-bottom: 14px;
+    border-bottom: 2px solid #000;
+    padding-bottom: 8px;
+  }
+
+  .imp-empresa {
+    font-size: 16px;
+    font-weight: bold;
+    text-transform: uppercase;
+  }
+
+  .imp-titulo {
+    font-size: 13px;
+    margin-top: 4px;
+  }
+
+  .imp-meta {
+    font-size: 10px;
+    color: #333;
+    margin-top: 4px;
+  }
+
+  .imp-secao-titulo {
+    font-size: 13px;
+    font-weight: bold;
+    text-transform: uppercase;
+    margin: 16px 0 6px;
+    border-bottom: 1px solid #000;
+    padding-bottom: 3px;
+  }
+
+  table.imp-tabela {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10.5px;
+    margin-bottom: 6px;
+  }
+
+  table.imp-tabela th,
+  table.imp-tabela td {
+    border: 1px solid #999;
+    padding: 3px 5px;
+    text-align: left;
+  }
+
+  table.imp-tabela th {
+    background: #eee;
+  }
+
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
 }
 
 .summary-bar {
@@ -396,6 +526,60 @@ body {
 .import-summary-duplicados ul {
   margin: 0.5rem 0 0;
   padding-left: 1.25rem;
+}
+
+.importacoes-historico {
+  margin-bottom: 1rem;
+}
+
+.importacoes-historico h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+}
+
+.importacoes-historico-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.importacoes-historico-item {
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.5rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  background: white;
+}
+
+.importacoes-historico-cabecalho {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.importacoes-historico-horario {
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+.importacoes-historico-numeros {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 0.35rem;
+  font-size: 0.85rem;
+  color: #475569;
+}
+
+.importacoes-historico-duplicados {
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 0.85rem;
 }
 
 .historico-list {

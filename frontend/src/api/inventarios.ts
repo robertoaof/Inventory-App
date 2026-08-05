@@ -239,6 +239,22 @@ export async function fecharInventario(data: string): Promise<InventarioFechado>
 }
 
 /**
+ * Lista o histórico de importações de XML feitas num dia (RF15, "para fins
+ * de consulta futura"). GET /api/v1/inventarios/{data}/importacoes —
+ * somente leitura; lista vazia (`[]`) não é erro, é "nenhuma importação
+ * ainda".
+ */
+export async function listarImportacoes(data: string): Promise<ResumoImportacao[]> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/inventarios/${data}/importacoes`);
+
+  if (!response.ok) {
+    await parseErroOuLancar(response);
+  }
+
+  return (await response.json()) as ResumoImportacao[];
+}
+
+/**
  * "Nova contagem" — limpa os lançamentos do dia selecionado (RF22, RN21).
  * DELETE /api/v1/inventarios/{data}/itens
  * Óleos/graxas mantêm `quantidade_sistema` (RN27) e só têm o físico zerado;

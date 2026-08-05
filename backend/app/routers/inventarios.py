@@ -2,6 +2,9 @@ import logging
 import re
 import xml.etree.ElementTree as ET
 from datetime import date
+
+import defusedxml.ElementTree as DefusedET
+from defusedxml.common import EntitiesForbidden
 from typing import Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Body, Depends, File, Query, UploadFile
@@ -27,6 +30,12 @@ ATRIBUTO_SISTEMA = "Coluna2"
 ATRIBUTO_UNIDADE = "Coluna4"
 ATRIBUTO_CODIGO = "Coluna6"
 ATRIBUTO_DESCRICAO = "Coluna7"
+
+# Limite de tamanho do upload em `POST /{data}/importar-xml` — arquivo
+# legítimo grande, ou malicioso, não deve ser lido por completo antes de
+# ser rejeitado (ver leitura em pedaços em `importar_xml`).
+TAMANHO_MAXIMO_UPLOAD_BYTES = 10 * 1024 * 1024
+TAMANHO_PEDACO_LEITURA_UPLOAD = 1024 * 1024
 
 logger = logging.getLogger(__name__)
 
@@ -487,7 +496,7 @@ def extrair_itens_xml(conteudo: bytes) -> List[Dict]:
     (fluxo-de-telas.md seção 4.2). Itens sem código são descartados, como no
     protótipo — sem código não há identidade (RN04). Levanta `ET.ParseError`
     se o arquivo não for um XML bem formado (tratado como 422 pela rota)."""
-    raiz = ET.fromstring(conteudo)
+    raiz = DefusedET.fromstring(conteudo)
 
     itens: List[Dict] = []
     for elemento in raiz.iter():
@@ -689,13 +698,42 @@ async def importar_xml(
     if arquivo is None:
         return erro("arquivo_ausente", "Envie o arquivo XML no campo 'arquivo' do formulário.", 400)
 
-    conteudo = await arquivo.read()
+    # Lê em pedaços e aborta assim que ultrapassar o limite, sem terminar de
+    # consumir o stream — um arquivo de centenas de MB não deve ser
+    # totalmente carregado na memória só para ser rejeitado em seguida.
+    # (`arquivo.size`/Content-Length não é confiável o bastante aqui: nem
+    # todo cliente envia o cabeçalho, e o Starlette não garante o valor
+    # antes de ler o corpo.)
+    pedacos = bytearray()
+    while True:
+        pedaco = await arquivo.read(TAMANHO_PEDACO_LEITURA_UPLOAD)
+        if not pedaco:
+            break
+        pedacos.extend(pedaco)
+        if len(pedacos) > TAMANHO_MAXIMO_UPLOAD_BYTES:
+            await arquivo.close()
+            return erro(
+                "arquivo_muito_grande",
+                "O arquivo enviado excede o limite de 10 MB permitido para importação.",
+                422,
+            )
+    conteudo = bytes(pedacos)
     if not conteudo.strip():
         return erro("arquivo_ausente", "O arquivo enviado está vazio.", 400)
 
     # Passo 4.1: valida antes de tocar no banco.
     try:
         itens_xml = extrair_itens_xml(conteudo)
+    except EntitiesForbidden:
+        # defusedxml detectou expansão de entidades (ex.: "billion laughs").
+        # Não é um XML mal formado — é um XML bem formado, mas malicioso —
+        # por isso um código de erro diferente de xml_invalido.
+        return erro(
+            "xml_entidade_proibida",
+            "O arquivo XML foi rejeitado por conter entidades XML não "
+            "permitidas (possível ataque de expansão de entidades).",
+            422,
+        )
     except ET.ParseError:
         return erro(
             "xml_invalido",

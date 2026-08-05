@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import DateSelector from "../components/layout/DateSelector";
 import SummaryBar from "../components/comuns/SummaryBar";
 import SearchInput from "../components/comuns/SearchInput";
@@ -7,10 +7,12 @@ import AlertDialog from "../components/comuns/AlertDialog";
 import EditingBanner from "../components/comuns/EditingBanner";
 import ImportXMLButton from "../components/inventarios/ImportXMLButton";
 import ImportSummaryDialog from "../components/inventarios/ImportSummaryDialog";
+import ImportacoesHistoricoList from "../components/inventarios/ImportacoesHistoricoList";
 import PecaListItem from "../components/inventarios/PecaListItem";
+import PrintInventoryButton from "../components/impressao/PrintInventoryButton";
 import { useInventarioDoDia } from "../hooks/useInventarioDoDia";
 import { dataLocalHoje } from "../utils/data";
-import type { ResumoImportacao } from "../api/inventarios";
+import { listarImportacoes, type ResumoImportacao } from "../api/inventarios";
 
 interface InventariosPageProps {
   data: string;
@@ -41,6 +43,28 @@ export default function InventariosPage({ data, onDataChange }: InventariosPageP
   const [search, setSearch] = useState("");
   const [aviso, setAviso] = useState<string | null>(null);
   const [resumoImportacao, setResumoImportacao] = useState<ResumoImportacao | null>(null);
+  const [importacoes, setImportacoes] = useState<ResumoImportacao[]>([]);
+  const [carregandoImportacoes, setCarregandoImportacoes] = useState(true);
+
+  // RF15: histórico de importações do dia, "para fins de consulta futura"
+  // (GET /inventarios/{data}/importacoes). Lista vazia não é erro — se a
+  // busca falhar, trata como lista vazia em vez de travar a tela com um
+  // alerta por algo que é só um painel de consulta secundário.
+  const carregarImportacoes = useCallback(async () => {
+    setCarregandoImportacoes(true);
+    try {
+      const lista = await listarImportacoes(data);
+      setImportacoes(lista);
+    } catch {
+      setImportacoes([]);
+    } finally {
+      setCarregandoImportacoes(false);
+    }
+  }, [data]);
+
+  useEffect(() => {
+    void carregarImportacoes();
+  }, [carregarImportacoes]);
 
   const pecas = inventario?.pecas ?? [];
   const resumo = inventario?.resumo_pecas ?? { falta: 0, sobra: 0, correto: 0 };
@@ -61,8 +85,10 @@ export default function InventariosPage({ data, onDataChange }: InventariosPageP
   const handleImportado = async (novoResumo: ResumoImportacao) => {
     setResumoImportacao(novoResumo);
     // Re-busca o dia para trazer as peças novas e os sistemas atualizados
-    // (docs/fluxo-de-telas.md seção 5).
+    // (docs/fluxo-de-telas.md seção 5), e refaz a lista de importações para
+    // o painel de consulta refletir o novo arquivo sem recarregar a página.
     await recarregar();
+    await carregarImportacoes();
   };
 
   return (
@@ -106,6 +132,12 @@ export default function InventariosPage({ data, onDataChange }: InventariosPageP
           />
         ))}
       </ul>
+
+      <ImportacoesHistoricoList importacoes={importacoes} carregando={carregandoImportacoes} />
+
+      <footer className="actions-footer">
+        <PrintInventoryButton data={data} inventario={inventario} />
+      </footer>
 
       <ImportSummaryDialog
         aberto={resumoImportacao !== null}
