@@ -21,7 +21,7 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD python -c "import urllib.request as u; u.urlopen('http://localhost:8000/api/v1/health', timeout=3)" || exit 1
 
-# Número de workers não está definido em docs/docker-compose.md — não
-# inventamos um valor aqui. Se/quando isso for decidido, ajustar o CMD
-# abaixo (ex.: --workers N) ou introduzir gunicorn+uvicorn workers.
+# Número de workers em produção (5, decisão de 2026-08-09) é definido em
+# docker-compose.prod.yml, não aqui — este CMD é o padrão de 1 worker,
+# usado em dev/teste; produção sobrescreve via `command`.
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

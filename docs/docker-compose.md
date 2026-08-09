@@ -14,6 +14,7 @@ Os arquivos deste documento devem ser criados assim:
 sistema-inventario-scania/
 ├── docker-compose.yml
 ├── docker-compose.override.yml   # ajustes específicos de desenvolvimento
+├── docker-compose.prod.yml       # ajustes explícitos de produção
 ├── .env.example                  # modelo de variáveis, sem segredos reais
 ├── frontend/
 │   └── Dockerfile
@@ -97,6 +98,14 @@ e se enxergam pelo **nome do serviço** (`db`, `backend`) em vez de
   query. Isso também resolve, de graça, o problema de `docker compose up`
   do zero subir com o banco vazio (antes, migração e seed precisavam ser
   rodados à mão depois do primeiro `up`).
+- **Número de workers do Uvicorn — decidido em 2026-08-09:** `5` em
+  produção, dimensionado para até 5 usuários simultâneos (a pessoa, o
+  colega de setor e a supervisora usariam o sistema hoje — sem
+  autenticação ainda —, mais uma folga). Definido só em
+  `docker-compose.prod.yml` (`command: uvicorn ... --workers 5`), não no
+  `CMD` do `Dockerfile`, que continua com 1 worker (padrão adequado para
+  dev). Se o número de usuários simultâneos crescer no futuro, é só
+  ajustar esse valor.
 
 ---
 
@@ -169,11 +178,28 @@ produção), o padrão recomendado é:
   montar o código-fonte como volume (pra o hot reload funcionar), rodar o
   frontend no modo Vite em vez do build de produção, expor portas extras
   úteis só em dev.
-
-Para produção, a prática comum é rodar com `docker compose -f
-docker-compose.yml up` (ignorando o override), ou manter um terceiro
-arquivo `docker-compose.prod.yml` explícito — a decisão entre essas duas
-formas fica registrada como ponto em aberto (seção 8).
+- **`docker-compose.prod.yml`** — decidido em 2026-08-09: um terceiro
+  arquivo explícito para produção, carregado só quando pedido
+  (`docker compose -f docker-compose.yml -f docker-compose.prod.yml up`),
+  nunca automaticamente. Nele entram os ajustes específicos de produção
+  que não fazem sentido como padrão em dev: `restart: unless-stopped` em
+  `db`/`backend`/`frontend` (em dev, um container que morre geralmente
+  significa um bug que você quer *ver*, não um restart automático
+  escondendo o problema), `API_ENV=production` e o número de workers do
+  Uvicorn (seção 3).
+  Motivo de ser um arquivo à parte, em vez de só rodar `docker compose -f
+  docker-compose.yml up` ignorando o override: a base já é seguro o
+  suficiente para subir sozinha (porta 80 via Nginx, sem bind mount de
+  código), mas alguns ajustes só fazem sentido em produção de verdade —
+  `restart: unless-stopped`, por exemplo, esconderia um container
+  reiniciando sozinho durante o desenvolvimento, quando o comportamento
+  desejado é o container morrer visivelmente para o bug aparecer. Manter
+  esses ajustes só na base misturaria comportamento de produção com o de
+  dev; manter só no override os deixaria fora do alcance da base sozinha.
+  Um arquivo nomeado explicitamente `.prod.yml`, carregado só por escolha
+  deliberada (`-f docker-compose.prod.yml`), documenta a intenção no
+  próprio comando de deploy — quem lê o script de subida em produção vê
+  exatamente quais arquivos foram usados.
 
 ---
 
@@ -181,8 +207,8 @@ formas fica registrada como ponto em aberto (seção 8).
 
 - ~~Onde as migrações do Alembic rodam~~ — **resolvido em 2026-08-09**, ver
   seção 3: serviço `migrate` separado, com `backend` dependendo dele.
-- **Formato exato do arquivo de produção** — `docker-compose.prod.yml`
-  separado, ou só rodar o `docker-compose.yml` base ignorando o override.
+- ~~Formato exato do arquivo de produção~~ — **resolvido em 2026-08-09**,
+  ver seção 7: `docker-compose.prod.yml` explícito.
 - **Onde os backups do volume do Postgres são guardados**, e com que
   frequência — não é escopo deste documento (é operação, não arquitetura),
   mas precisa de uma resposta antes de qualquer ambiente ir pra produção de
@@ -197,8 +223,10 @@ formas fica registrada como ponto em aberto (seção 8).
 ## 9. Comandos esperados (para referência de quem for usar, depois de pronto)
 
 ```bash
-docker compose up              # sobe tudo (usa .yml + override automaticamente)
-docker compose up -d           # mesma coisa, em segundo plano
+docker compose up              # dev: sobe tudo (usa .yml + override automaticamente)
+docker compose up -d           # dev, em segundo plano
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+                                # produção: ignora o override, aplica os ajustes de prod
 docker compose down            # derruba tudo (mantém os volumes)
 docker compose down -v         # derruba tudo E apaga os volumes (cuidado: apaga o banco)
 docker compose logs -f backend # acompanha só os logs do backend

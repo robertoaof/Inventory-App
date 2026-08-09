@@ -655,6 +655,40 @@ seguro uma pessoa/uma sessão só levar do início ao fim.
 > isso for decidido). `docker build -t invcontra-backend-test ./backend`
 > concluído com sucesso.
 
+### Ajustes adicionais — decididos e implementados em 2026-08-09 (depois do fechamento inicial do Sprint 7)
+
+- [x] **Criado `docker-compose.prod.yml`** (decisão da pessoa): arquivo
+      explícito de produção, carregado só sob pedido (`docker compose -f
+      docker-compose.yml -f docker-compose.prod.yml up`). Contém
+      `restart: unless-stopped` em `db`/`backend`/`frontend`,
+      `API_ENV=production` e o número de workers do backend — ajustes que
+      só fazem sentido em produção de verdade, mantidos fora da base para
+      não misturar com o comportamento de dev (um `restart: unless-stopped`
+      em dev esconderia um container reiniciando por bug em vez de morrer
+      visivelmente). Resolve o ponto em aberto da seção 8 de
+      `docs/docker-compose.md` sobre o formato do arquivo de produção.
+- [x] **Número de workers do Uvicorn definido como 5** (decisão da pessoa,
+      2026-08-09): dimensionado para até 5 usuários simultâneos (a pessoa,
+      o colega de setor e a supervisora hoje, com folga) — mesmo sem
+      autenticação implementada ainda, já deixado pronto para quando
+      existir. Definido só em `docker-compose.prod.yml`
+      (`command: uvicorn ... --workers 5`); o `CMD` do `backend/Dockerfile`
+      continua com 1 worker (padrão de dev), com o comentário atualizado
+      para apontar pro arquivo de produção em vez de dizer "não decidido".
+- **Verificado em 2026-08-09** contra o ambiente Docker real:
+  `docker compose -f docker-compose.yml -f docker-compose.prod.yml config`
+  confirmou o merge esperado (`command` com `--workers 5`,
+  `API_ENV: production`, `restart: unless-stopped`). Subindo de fato
+  (`down` + `up --build -d` com os dois arquivos, `.env` com
+  `CORS_ORIGINS` temporariamente ajustado para a origem de produção): os
+  logs do `backend` mostraram `Started parent process` + **5** `Started
+  server process` distintos; `docker inspect` confirmou
+  `RestartPolicy.Name = unless-stopped` nos três serviços; frontend (porta
+  80) e `GET /api/v1/health` responderam `200`; header
+  `access-control-allow-origin` correto para a origem de produção. Ambiente
+  devolvido ao estado de desenvolvimento (`.env` restaurado, `docker
+  compose up --build -d` com base + override) ao final.
+
 ---
 
 ## Log de decisões tomadas durante a implementação
