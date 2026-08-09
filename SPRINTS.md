@@ -586,6 +586,64 @@ seguro uma pessoa/uma sessão só levar do início ao fim.
 >   versões recentes do Compose (v2+) e gera um warning em todo comando —
 >   não quebra nada, registrado no log de decisões.
 >
+### 🐛 Bug encontrado ao testar o ambiente de produção isolado (sem override) — CORRIGIDO em 2026-08-09
+
+- [x] **`docker compose -f docker-compose.yml up` (só a base, sem o
+      `docker-compose.override.yml`) — que `docs/docker-compose.md` seção 7
+      descreve como o jeito de rodar produção — não subia.** O teste de
+      ponta a ponta anterior (acima) sempre rodou com `docker compose up`
+      puro, que carrega a base **e** o override automaticamente; nunca
+      exercitou a base sozinha.
+      Reproduzido: `docker compose down` seguido de `docker compose -f
+      docker-compose.yml up --build -d`. O `frontend` saía com `exit 127`:
+      ```
+      frontend-1  | /docker-entrypoint.sh: exec: line 47: npm: not found
+      ```
+      Causa: `docker-compose.yml` (base) tinha configuração de
+      **desenvolvimento vazada** nela — `frontend` com `command: npm run
+      dev`, porta `5173:5173` e volume do código-fonte montado, mesmo sem
+      o override. Sem `target: build` explícito, a imagem builda até o
+      último estágio do Dockerfile (`production`, baseado em Nginx), que
+      não tem `npm` — daí o `exit 127`. `backend` também tinha
+      `volumes: ./backend:/app` na base (bind mount de código-fonte só faz
+      sentido em dev, para hot-reload; produção deveria rodar só o que foi
+      copiado pra dentro da imagem no build).
+      **Correção aplicada:** movida toda configuração de desenvolvimento do
+      `frontend` (porta `5173`, `command: npm run dev`, volumes de
+      código-fonte) para `docker-compose.override.yml`; a base agora expõe
+      só `80:80` (porta de produção, servida pelo Nginx do estágio
+      `production` do Dockerfile) e não sobrescreve `command`. Removido
+      `volumes: ./backend:/app` da base (o override já declara o mesmo bind
+      mount, só para dev). Como o Compose faz *merge* (concatena, não
+      substitui) o campo `ports` de dois arquivos por padrão, o override
+      precisou da tag `!override` em `ports` para não acabar publicando
+      `80` **e** `5173` ao mesmo tempo em desenvolvimento
+      (`ports: !override` em `docker-compose.override.yml`, serviço
+      `frontend`) — confirmado com `docker compose config` que o merge
+      final em dev expõe só `5173`, e a base sozinha expõe só `80`.
+      **Verificado em produção isolada** (`docker compose down` + `docker
+      compose -f docker-compose.yml up --build -d`, do zero): os quatro
+      serviços sobem (`migrate` roda e sai, `db`/`backend` `healthy`,
+      `frontend` `Up` servindo Nginx em `80`); `GET /` no frontend → `200`;
+      `GET /api/v1/health` → `200`. **Achado relacionado, não é bug de
+      código:** com `CORS_ORIGINS` do `.env` local ainda apontando para
+      `http://localhost:5173` (valor de dev), o navegador em produção
+      (origem `http://localhost:80`) levaria `CORS` a bloquear as chamadas
+      à API — confirmado faltando o header `access-control-allow-origin`
+      na resposta. Ajustado temporariamente `CORS_ORIGINS=http://localhost`
+      só para o teste (backend recriado), confirmado o header correto, e
+      então **revertido** para o valor de dev ao final — um `.env` real de
+      produção (arquivo local, fora do controle de versão, nunca o mesmo
+      usado em dev) precisa ter `CORS_ORIGINS` apontando para a origem
+      real do frontend hospedado; isso já é esperado pelo próprio
+      `docs/docker-compose.md` seção 6, só não tinha sido exercitado até
+      agora. Fluxo completo testado com produção isolada de ponta a ponta:
+      `POST /importar-xml` (peça de teste `PC-PROD-TESTE-01`, `pecas_novas:
+      1`) → `POST /fechar` (`status: "fechado"`) → dados de teste apagados
+      via `psql` ao final. Ambiente devolvido ao estado de desenvolvimento
+      (`.env` restaurado, `docker compose up --build -d` com a base +
+      override) antes de encerrar a sessão.
+
 > **`backend/Dockerfile` avaliado e ajustado nesta sessão, 2026-08-09:** criado
 > `backend/.dockerignore` (não existia — `COPY . .` estava copiando
 > `__pycache__/`, `.pytest_cache/` etc. para dentro da imagem). Adicionado
@@ -604,6 +662,17 @@ seguro uma pessoa/uma sessão só levar do início ao fim.
 > Preencha aqui sempre que uma tarefa exigir uma decisão que não estava
 > fechada nos documentos de `docs/`. Formato: `[Sprint X] Pergunta → decisão → data`.
 
+- [Sprint 7] O `docker-compose.yml` base tinha configuração de desenvolvimento
+  do `frontend` (comando `npm run dev`, porta `5173`, volume de código-fonte)
+  vazada nela, então rodar só a base (`docker compose -f docker-compose.yml
+  up`, o jeito de produção descrito em `docs/docker-compose.md` seção 7)
+  derrubava o `frontend` (`exit 127`, `npm: not found` na imagem final
+  Nginx) — bug técnico, não decisão de negócio → configuração de dev movida
+  para `docker-compose.override.yml` (que já existia para isso); base passou
+  a expor só `80:80` sem sobrescrever `command`; `!override` usado no
+  `ports` do override para o Compose não concatenar `80` e `5173` ao mesmo
+  tempo em dev (o merge padrão do Compose para listas é concatenar, não
+  substituir) → 2026-08-09.
 - [Sprint 7] **Ponto em aberto resolvido pela pessoa em 2026-08-09:** onde as
   migrações do Alembic rodam em produção (`docs/docker-compose.md` seção 8)
   → serviço `migrate` separado em `docker-compose.yml`, que roda `alembic
