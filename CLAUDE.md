@@ -34,6 +34,7 @@ definida:
 | `docs/fluxo-de-telas.md` | Fluxo completo da importação de XML, passo a passo |
 | `docs/componentes-react.md` | Árvore de componentes React e responsabilidade de cada um |
 | `docs/docker-compose.md` | Especificação dos serviços Docker |
+| `docs/preparativos-vps.md` | Roteiro passo a passo de deploy numa VPS (Hostinger) |
 | `docs/contagem_oleo.html` | Protótipo funcional — referência de comportamento visual e de UX, NÃO de arquitetura |
 
 `SPRINTS.md` (na raiz) é o backlog vivo: lista as tarefas por sprint, com
