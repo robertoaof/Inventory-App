@@ -32,7 +32,7 @@ E confirme especificamente:
 - [x] `alembic upgrade head` roda contra o Postgres real sem erro.
       **Exigiu duas correções** de caminho (`script_location` e o
       `sys.path` do `env.py`) — ver log de decisões.
-- [ ] **Ordem seed vs. migração:** `backend/app/seed_items.py` chama
+- [x] **Ordem seed vs. migração:** `backend/app/seed_items.py` chama
       `Base.metadata.create_all(bind=engine)` antes de popular o catálogo.
       As colunas geradas `diferenca`/`status` só existem de fato via
       `sa.Computed(...)` na migração Alembic (`0001_initial.py`) —
@@ -41,10 +41,10 @@ E confirme especificamente:
       criadas sem essas colunas geradas corretamente, furando a regra de
       "migração só via Alembic". Verificar com `\d+ inventarios` no
       `psql` se `diferenca`/`status` aparecem como `GENERATED ALWAYS AS`.
-      Se não aparecerem, é necessário corrigir a ordem de inicialização
-      (rodar `alembic upgrade head` antes do seed) — **não decidido ainda,
-      confirmar com a pessoa antes de mexer**, pois se conecta ao ponto em
-      aberto do Sprint 7 sobre onde as migrações rodam em produção.
+      **Resolvido pelo serviço `migrate` do Sprint 7** (`alembic upgrade
+      head && python -m app.seed_items`, nessa ordem) e verificado em
+      2026-08-09 contra um banco criado do zero — ver Sprint 7 e log de
+      decisões.
 - [x] **Verificado em 2026-08-03:** `diferenca` e `status` aparecem como
       `GENERATED ALWAYS` em `inventario_itens`, e o cálculo foi conferido
       na prática (físico 5 / sistema 0 → `diferenca 5`, `status sobra`).
@@ -531,18 +531,71 @@ seguro uma pessoa/uma sessão só levar do início ao fim.
 
 ## Sprint 7 — Docker e implantação
 
-- [ ] Dockerfile do backend (produção)
-- [ ] Dockerfile multi-stage do frontend (dev com Vite / produção com Nginx)
-- [ ] Confirmar healthcheck do `db` funcionando com `depends_on: condition: service_healthy`
-- [ ] Decidir e documentar onde as migrações do Alembic rodam (`docs/docker-compose.md` seção 8) — **perguntar à pessoa antes de implementar**
-- [ ] Teste de ponta a ponta: `docker compose up` do zero, sem nenhum ambiente pré-configurado, até conseguir importar um XML e fechar um dia
+- [x] Dockerfile do backend (produção)
+- [x] Dockerfile multi-stage do frontend (dev com Vite / produção com Nginx)
+- [x] Confirmar healthcheck do `db` funcionando com `depends_on: condition: service_healthy`
+- [x] Decidir e documentar onde as migrações do Alembic rodam (`docs/docker-compose.md` seção 8) — **perguntar à pessoa antes de implementar**
+- [x] Teste de ponta a ponta: `docker compose up` do zero, sem nenhum ambiente pré-configurado, até conseguir importar um XML e fechar um dia
 
 **Dependências:** todos os sprints anteriores funcionando localmente sem Docker.
 
-> **Nota:** já existem `backend/Dockerfile` e `frontend/Dockerfile` no
-> repositório (não avaliados a fundo nesta sessão, pois o Sprint 7 depende
-> de todos os anteriores estarem prontos primeiro). Não marquei nenhum
-> checkbox deste sprint — fica para quando chegarmos nele na ordem correta.
+> **Nota de verificação (2026-08-09):** Sprint 7 auditado e testado de ponta
+> a ponta.
+> - **`backend/Dockerfile`** já existia com a base funcional
+>   (`python:3.12-slim`, instala `requirements.txt`, `CMD uvicorn
+>   app.main:app --host 0.0.0.0 --port 8000`); usuário não-root (`appuser`)
+>   e `HEALTHCHECK` em Python puro batendo em `/api/v1/health` foram
+>   adicionados nesta sessão (2026-08-09) — ver detalhe no bloco abaixo.
+> - **`frontend/Dockerfile`** já existia pronto e correto: multi-stage,
+>   estágio `build` (`node:20-alpine`, `npm install`, `npm run build`) e
+>   estágio `production` (`nginx:stable-alpine`, copia `dist/` + `nginx.conf`,
+>   `EXPOSE 80`). `docker-compose.override.yml` já usa `build.target: build`
+>   para forçar o estágio de dev (Vite) em desenvolvimento. Não precisou de
+>   nenhuma mudança.
+> - **Healthcheck do `db`** confirmado na prática: `pg_isready -U
+>   $POSTGRES_USER`, `backend` depende dele com `condition: service_healthy`;
+>   `docker compose ps` mostrou `db` como `healthy` antes de `migrate` e
+>   `backend` iniciarem.
+> - **Onde as migrações do Alembic rodam — decisão da pessoa (ver log de
+>   decisões):** serviço `migrate` separado no `docker-compose.yml`, que roda
+>   `alembic upgrade head && python -m app.seed_items` (nessa ordem, por causa
+>   das colunas `GENERATED ALWAYS AS` de `diferenca`/`status`) e sai;
+>   `backend` passa a depender de `migrate` com `condition:
+>   service_completed_successfully`, além de continuar dependendo de `db`.
+> - **Teste de ponta a ponta, do zero, sem passo manual:** `docker compose
+>   down -v` (apagou o volume do Postgres) seguido de `docker compose up
+>   --build -d`. `migrate` rodou e saiu com sucesso (`alembic.runtime.migration]
+>   Running upgrade -> 0001_initial, Initial tables` seguido de `Seed completo:
+>   catálogo fixo inserido.`); ordem de dependência funcionou como esperado
+>   (`db` healthy → `migrate` roda e sai → `backend`/`frontend` sobem
+>   healthy). Confirmado via `psql` (`\d+ inventario_itens`) que `diferenca`/
+>   `status` saem como `GENERATED ALWAYS AS ... STORED` num banco criado do
+>   zero só pelo `migrate`. `GET /api/v1/inventarios/2026-08-09` (dia novo)
+>   devolveu os 11 itens do catálogo com `status: "nao_iniciado"`, sem
+>   nenhuma escrita manual prévia. `POST
+>   /inventarios/2026-08-09/importar-xml` com um XML de teste retornou `200`,
+>   `pecas_novas: 1`; `POST /inventarios/2026-08-09/fechar` retornou `200`,
+>   `status: "fechado"` — importar XML e fechar um dia funcionou de ponta a
+>   ponta contra um ambiente Docker criado 100% do zero. Dados de teste
+>   (inventário do dia, `PC-TESTE-01`, linha de `importacoes_xml`) apagados
+>   via `psql` ao final, e `GET /inventarios/2026-08-09` reconfirmado voltando
+>   a `nao_iniciado` com os 11 itens do catálogo intactos. Ambiente ficou
+>   rodando ao final (`docker compose ps`: três serviços `Up`/`healthy`).
+> - **Achado não bloqueante, não corrigido:** `version: "3.9"` no topo de
+>   `docker-compose.yml` e `docker-compose.override.yml` é obsoleto nas
+>   versões recentes do Compose (v2+) e gera um warning em todo comando —
+>   não quebra nada, registrado no log de decisões.
+>
+> **`backend/Dockerfile` avaliado e ajustado nesta sessão, 2026-08-09:** criado
+> `backend/.dockerignore` (não existia — `COPY . .` estava copiando
+> `__pycache__/`, `.pytest_cache/` etc. para dentro da imagem). Adicionado
+> `HEALTHCHECK` em Python puro (sem instalar `curl`) usando o `GET
+> /api/v1/health` já existente em `app/main.py`. Adicionado usuário não-root
+> (`appuser`) — boa prática que não quebrou nada, testado com `docker run`.
+> Número de `--workers` no `CMD` não foi definido por não haver decisão em
+> `docs/docker-compose.md` (deixado como comentário no Dockerfile para quando
+> isso for decidido). `docker build -t invcontra-backend-test ./backend`
+> concluído com sucesso.
 
 ---
 
@@ -551,6 +604,37 @@ seguro uma pessoa/uma sessão só levar do início ao fim.
 > Preencha aqui sempre que uma tarefa exigir uma decisão que não estava
 > fechada nos documentos de `docs/`. Formato: `[Sprint X] Pergunta → decisão → data`.
 
+- [Sprint 7] **Ponto em aberto resolvido pela pessoa em 2026-08-09:** onde as
+  migrações do Alembic rodam em produção (`docs/docker-compose.md` seção 8)
+  → serviço `migrate` separado em `docker-compose.yml`, que roda `alembic
+  upgrade head && python -m app.seed_items` (nessa ordem — Alembic primeiro,
+  já que as colunas `GENERATED ALWAYS AS` de `diferenca`/`status` só existem
+  via migração; `models.py` só declara `server_default` estático) e sai
+  (`restart: "no"`). `backend` passou a depender de `migrate` com `condition:
+  service_completed_successfully`, além de continuar dependendo de `db:
+  condition: service_healthy`. Também fecha a pendência "Ordem seed vs.
+  migração" registrada no topo deste arquivo desde 2026-08-03. Verificado
+  de ponta a ponta em 2026-08-09 com `docker compose down -v && docker
+  compose up --build -d`: `migrate` roda e sai antes do `backend` subir, e
+  `\d+ inventario_itens` no `psql` confirma `diferenca`/`status` como
+  `GENERATED ALWAYS AS ... STORED` num banco criado do zero.
+- [Sprint 7] `docker-compose.yml` e `docker-compose.override.yml` ainda têm
+  `version: "3.9"` no topo, atributo obsoleto no Compose v2+ — todo comando
+  (`docker compose config`, `up`, etc.) emite o warning `the attribute
+  'version' is obsolete, it will be ignored`. Não quebra nada; não removido
+  por não ter sido pedido e ser uma mudança de escopo separada (bug técnico,
+  não decisão de negócio) → 2026-08-09. **Removido em 2026-08-09** a pedido
+  da pessoa; `docker compose config` confirmado sem o warning depois da
+  remoção.
+- [Sprint 7] `frontend/Dockerfile` (multi-stage já existia) não tinha
+  `frontend/.dockerignore` — o `COPY . .` do estágio `build` copiava o
+  `node_modules/` e `dist/` locais (rodados com Node no Windows) por cima
+  do `node_modules` recém-instalado dentro do container Linux, com risco
+  de quebrar binários nativos (esbuild/rollup) de forma silenciosa. Criado
+  `frontend/.dockerignore` excluindo `node_modules`, `dist`, `.git`,
+  `.env*` (mantendo `.env.example`) e afins. `nginx.conf` já estava correto
+  para SPA (`try_files $uri $uri/ /index.html`). Build confirmado limpo com
+  `docker build -t invcontra-frontend-test ./frontend` → 2026-08-09.
 - [Sprint 0] `backend/requirements.txt` fixava `psycopg[binary]==3.4.0`
   (versão inexistente no PyPI, bug técnico, não decisão de negócio) →
   corrigido para `psycopg[binary]==3.2.10` (mais antiga da série 3.2.x

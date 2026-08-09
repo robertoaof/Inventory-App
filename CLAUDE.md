@@ -75,20 +75,29 @@ sem que a pessoa peça explicitamente:
 - Autosave no frontend: debounce de ~500ms, uma requisição por item
   alterado (nunca por tecla) — RNF11.
 
-## Pontos ainda em aberto (não resolver sozinho)
+## Pontos que já foram resolvidos (histórico de decisões)
 
-Se uma tarefa esbarrar em um destes pontos, pare e pergunte à pessoa em vez
-de decidir por conta própria — eles estão listados como não resolvidos nos
-próprios documentos de design:
+Todos os pontos que antes estavam listados aqui como "em aberto" já foram
+decididos pela pessoa. Ver `SPRINTS.md`, seção "Log de decisões", para o
+detalhe de cada um:
 
-- Se "Nova contagem" num dia já fechado deve pedir confirmação extra
-  (`docs/rascunho-inventario.md`, seção 6).
-- Se rascunhos nunca fechados devem aparecer no Histórico
-  (`docs/regras-de-negocios.md`, seção 8).
-- Tamanho de página padrão do histórico (documento sugere 30, não
-  confirmado).
-- Onde/como as migrações do Alembic rodam em produção
-  (`docs/docker-compose.md`, seção 8).
+- "Nova contagem" num dia já fechado pede confirmação reforçada
+  (`ConfirmDialog` avisando que a contagem salva será apagada); o dia
+  continua `fechado` com `fechado_em` original preservado (RN18) — decidido
+  em 2026-08-03.
+- Rascunhos nunca fechados **não** aparecem no Histórico (RN25) — decidido
+  em 2026-08-05.
+- Tamanho de página padrão do histórico = **30** — confirmado em
+  2026-08-05.
+- Migrações do Alembic rodam via serviço `migrate` separado no
+  `docker-compose.yml` (`alembic upgrade head && python -m
+  app.seed_items`, nessa ordem), com `backend` dependendo dele via
+  `condition: service_completed_successfully` — decidido em 2026-08-09
+  (Sprint 7).
+
+Se surgir um novo ponto não coberto por `docs/` durante uma tarefa, pare e
+pergunte à pessoa em vez de decidir por conta própria — não reabra os
+pontos acima sem que a pessoa peça explicitamente.
 
 ## Como trabalhar neste repositório
 
