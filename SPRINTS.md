@@ -689,6 +689,52 @@ seguro uma pessoa/uma sessão só levar do início ao fim.
   devolvido ao estado de desenvolvimento (`.env` restaurado, `docker
   compose up --build -d` com base + override) ao final.
 
+### HTTPS via Caddy — decidido e implementado em 2026-08-09
+
+- [x] **Abordagem decidida pela pessoa:** proxy reverso Caddy dentro do
+      Docker (em vez de SSL gerenciado pela Hostinger), pela portabilidade
+      (não amarra a infra a um provedor específico) e por já vir com
+      renovação automática do Let's Encrypt sem passo manual.
+- [x] `frontend/Dockerfile` (estágio `production`) trocado de
+      `nginx:stable-alpine` para `caddy:2-alpine`; `frontend/nginx.conf`
+      removido. O estágio `build` agora recebe `VITE_API_URL=""` (ARG),
+      fazendo o React chamar a API em caminho relativo (`/api/v1/...`) em
+      vez de `http://localhost:8000` — resolvido pelo Caddy no mesmo
+      domínio/porta.
+- [x] `frontend/Caddyfile` criado: serve os estáticos do build, faz
+      `reverse_proxy` de `/api/*` para `backend:8000` (rede interna), e usa
+      `{$DOMAIN}` para decidir HTTPS automático vs. HTTP puro — sem
+      `DOMAIN` no `.env`, cai em HTTP puro na porta `80` (útil pra testar
+      só com IP, antes de ter domínio).
+- [x] `docker-compose.prod.yml`: `frontend` ganhou porta `443`, variáveis
+      `DOMAIN`/`ACME_EMAIL` e os volumes `caddy_data`/`caddy_config`
+      (persistem o certificado entre rebuilds, evitando esbarrar no rate
+      limit do Let's Encrypt). `backend` e `db` tiveram `ports: !override
+      []` — pararam de publicar `8000`/`5432` no host em produção, já que o
+      Caddy é o único ponto de entrada externo agora (alinha com a seção 3
+      de `docs/preparativos-vps.md`, que já dizia que essas portas nunca
+      deveriam estar abertas à internet, mas o compose ainda não
+      refletia isso).
+- [x] `.env.example` ganhou `DOMAIN=`/`ACME_EMAIL=` (vazios, só usados em
+      produção).
+- **Verificado em 2026-08-09** contra o ambiente Docker real: `docker
+  compose -f docker-compose.yml -f docker-compose.prod.yml build frontend`
+  buildou sem erro; subindo a stack completa (sem `DOMAIN` definido),
+  `GET http://localhost:80/` respondeu `200` (estático) e `GET
+  http://localhost:80/api/v1/health` respondeu `{"status":"ok"}` através do
+  proxy do Caddy; confirmado por `curl` que `localhost:8000` e
+  `localhost:5432` deixaram de responder do host. Um erro de sintaxe do
+  Caddyfile apareceu no primeiro teste (placeholder `{$DOMAIN:default}` não
+  aplica o default quando a variável existe mas está vazia — só quando não
+  existe) e foi corrigido resolvendo o default no próprio `docker-compose`
+  (`DOMAIN=${DOMAIN:-:80}`) em vez de no Caddyfile. Ambiente devolvido ao
+  estado de desenvolvimento ao final (`docker compose up -d --build` com
+  base + override), com `.env` local recriado a partir de `.env.example`
+  (era necessário sobrescrever o `.env` durante o teste de produção, e por
+  não ser versionado não havia como restaurar valores customizados
+  anteriores, caso existissem — vale conferir se algum valor do `.env`
+  local precisa ser reajustado).
+
 ### Backup do Postgres — decidido e implementado em 2026-08-09
 
 - [x] **Frequência/retenção** (decisão da pessoa): diário, mantendo os

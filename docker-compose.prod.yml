@@ -1,6 +1,10 @@
 services:
   db:
     restart: unless-stopped
+    # Só alcançável pela rede interna do Docker em produção — nunca pela
+    # internet (docs/preparativos-vps.md, seção 3). A base publica 5432 pra
+    # conveniência de cliente de banco em dev; aqui isso é removido.
+    ports: !override []
 
   backend:
     restart: unless-stopped
@@ -11,9 +15,24 @@ services:
     # deixado pronto para quando ela existir. Ajustar se o número de
     # usuários simultâneos crescer.
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "5"]
+    # Idem: só alcançável pelo frontend (Caddy) via rede interna. O Caddy
+    # proxeia /api/* para backend:8000 — não precisa estar publicado no host.
+    ports: !override []
 
   frontend:
     restart: unless-stopped
+    # HTTPS via Caddy (docs/preparativos-vps.md, seção 7) — decidido em
+    # 2026-08-09. DOMAIN e ACME_EMAIL vêm do .env; sem DOMAIN definido, o
+    # Caddyfile cai em HTTP puro na porta 80 (ver frontend/Caddyfile).
+    ports: !override
+      - "80:80"
+      - "443:443"
+    environment:
+      - DOMAIN=${DOMAIN:-:80}
+      - ACME_EMAIL=${ACME_EMAIL:-}
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
 
   # Backup diário do Postgres via pg_dump, com retenção de 7 dias
   # (decisão da pessoa, 2026-08-09). Guarda no volume nomeado backup_data
@@ -45,3 +64,8 @@ services:
 
 volumes:
   backup_data:
+  # Persistem certificados Let's Encrypt e estado interno do Caddy fora do
+  # ciclo de vida do container — sem isso, todo rebuild pediria certificado
+  # novo e esbarraria no rate limit do Let's Encrypt.
+  caddy_data:
+  caddy_config:

@@ -149,14 +149,25 @@ ambiente, e o `Dockerfile` precisa refletir isso:
   Isso é o que o `docker-compose.override.yml` (seção 7) deve configurar.
 - **Em produção:** o React não roda como um servidor de verdade — ele é
   **compilado** (`npm run build`) para um punhado de arquivos estáticos
-  (HTML/CSS/JS), que depois são servidos por algo simples como Nginx (ou
-  nem por container nenhum — ver observação importante na seção 5).
+  (HTML/CSS/JS), servidos por **Caddy** (decidido em 2026-08-09 — ver
+  `docs/preparativos-vps.md`, seção 7).
 
-Por isso, o `Dockerfile` do frontend deve ser **multi-stage**: um estágio
-que instala dependências e builda o projeto, e outro (só usado em produção)
+Por isso, o `Dockerfile` do frontend é **multi-stage**: um estágio que
+instala dependências e builda o projeto, e outro (só usado em produção)
 que copia o resultado do build para uma imagem final mínima, baseada em
-Nginx, sem o Node.js e as dependências de desenvolvimento presentes na
-imagem final.
+Caddy (`caddy:2-alpine`), sem o Node.js e as dependências de
+desenvolvimento presentes na imagem final. O Caddy, além de servir os
+arquivos estáticos, também faz proxy reverso de `/api/*` para o `backend`
+(pelo nome do serviço, rede interna do Docker) e cuida do certificado
+HTTPS automaticamente via Let's Encrypt quando a variável `DOMAIN` está
+preenchida no `.env` — sem `DOMAIN`, serve HTTP puro na porta `80`. Config
+em `frontend/Caddyfile`.
+
+Como o frontend passa a ser o único ponto de entrada externo, o `backend`
+e o `db` **não publicam mais porta nenhuma no host em produção**
+(`docker-compose.prod.yml` zera `ports` dos dois com `!override []`) — só
+são alcançáveis pela rede interna do Compose, coerente com o que a seção 3
+de `docs/preparativos-vps.md` já exigia do firewall.
 
 ---
 

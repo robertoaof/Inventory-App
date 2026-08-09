@@ -1,0 +1,18 @@
+# DOMAIN vem do .env (seção 7 de docs/preparativos-vps.md) — o compose já
+# resolve para ":80" quando não está definido (HTTP puro no IP, sem tentar
+# emitir certificado; Let's Encrypt não emite certificado para IP).
+{$DOMAIN} {
+	encode gzip
+
+	# Mesma origem do frontend, então evita CORS em produção — o browser
+	# nunca vê um domínio diferente para a API.
+	handle /api/* {
+		reverse_proxy backend:8000
+	}
+
+	handle {
+		root * /usr/share/caddy
+		try_files {path} /index.html
+		file_server
+	}
+}

@@ -211,28 +211,46 @@ desenvolvimento**, principalmente:
 
 ---
 
-## 7. HTTPS — ainda não implementado no repositório, decisão pendente
+## 7. HTTPS — implementado com Caddy (decidido em 2026-08-09)
 
-O `frontend/nginx.conf` que já existe no projeto serve **HTTP puro** na
-porta `80`. Isso é aceitável para testar, mas não deveria ser o estado
-final: sem HTTPS, tudo que passa entre o navegador e o servidor (inclusive
-senhas, se este sistema um dia tiver login) trafega sem criptografia, e a
-maioria dos navegadores hoje avisa o usuário que o site "não é seguro".
+O `frontend/Dockerfile` builda o React e serve o resultado com
+**Caddy** (`frontend/Caddyfile`), em vez de Nginx puro. Caddy tem dois
+papéis no mesmo container: serve os arquivos estáticos do React e
+faz proxy reverso de `/api/*` para o `backend` (rede interna do Docker,
+`backend:8000` — essa porta não fica mais publicada no host em produção,
+só o `frontend` fala com ela). Como frontend e API ficam na mesma origem,
+o navegador nunca faz uma requisição cross-origin em produção (CORS deixa
+de ser relevante nesse cenário, embora `CORS_ORIGINS` continue existindo
+para o ambiente de desenvolvimento, onde o Vite roda numa porta diferente
+do backend).
 
-**Isto ainda não está implementado — precisa ser feito antes do deploy
-valer como produção de verdade.** A forma mais simples de resolver, dado
-que o sistema já roda em containers, é adicionar um **proxy reverso com
-HTTPS automático** na frente do `frontend`/`backend` (ex.: [Caddy](https://caddyserver.com/),
-que renova o certificado do Let's Encrypt sozinho, com uma configuração de
-poucas linhas) — mas essa é uma decisão de implementação que vale
-confirmar antes de eu criar os arquivos, para não construir algo que não
-combine com o que você já tem em mente (por exemplo, se você preferir usar
-o proxy/SSL da própria Hostinger, caso exista essa opção no painel, em vez
-de rodar isso dentro do Docker).
+O comportamento depende só da variável `DOMAIN` no `.env`:
 
-**Não pule para produção de verdade sem resolver este ponto** — sistema
-sem HTTPS é aceitável só para teste interno atrás de firewall, não para
-uso real, mesmo sendo um sistema interno.
+- **`DOMAIN` vazio (padrão do `.env.example`):** Caddy serve HTTP puro na
+  porta `80`, sem tentar emitir certificado — é o modo certo pra testar
+  pelo IP (`http://SEU_IP_AQUI`), antes de ter um domínio configurado
+  (seção 5).
+- **`DOMAIN=inventario.suaempresa.com.br`:** depois que o DNS estiver
+  propagado (seção 5) e as portas `80`/`443` estiverem liberadas no
+  firewall (seção 3), basta preencher `DOMAIN` no `.env` e subir de novo
+  (`docker compose ... up -d --build`) — o Caddy pede e renova o
+  certificado Let's Encrypt sozinho, sem nenhum passo manual de
+  `certbot`/cron. Preencher também `ACME_EMAIL` é opcional, mas recomendado
+  (o Let's Encrypt usa esse endereço só para avisar sobre expiração, o que
+  na prática nunca deveria acontecer já que a renovação é automática).
+
+Os certificados ficam no volume nomeado `caddy_data` (persistente entre
+`up`/`down` e rebuilds — importante: sem esse volume, cada rebuild pediria
+certificado novo e esbarraria no rate limit do Let's Encrypt).
+
+**Verificado em 2026-08-09** subindo a stack de produção completa
+localmente (`docker compose -f docker-compose.yml -f
+docker-compose.prod.yml up -d --build`, sem `DOMAIN` definido): frontend
+respondeu `200` em `http://localhost:80/`, `GET /api/v1/health` através do
+proxy respondeu `{"status":"ok"}`, e as portas `8000` (backend) e `5432`
+(db) confirmadas como **não** alcançáveis do host — só o `frontend`
+(Caddy) fica exposto, como a seção 3 já exigia. Ambiente devolvido ao
+estado de desenvolvimento ao final.
 
 ---
 
@@ -315,8 +333,10 @@ de vida dos containers).
       desenvolvimento.
 - [ ] `CORS_ORIGINS` no `.env` aponta para o endereço real (domínio ou IP)
       onde o frontend está sendo acessado.
-- [ ] HTTPS resolvido (seção 7) — **não deveria ficar em aberto por muito
-      tempo**, mesmo sendo um sistema interno.
+- [ ] `DOMAIN` preenchido no `.env` da VPS e HTTPS confirmado no navegador
+      (cadeado, `https://`) — seção 7. Sem domínio ainda, ao menos rodando
+      em HTTP (o Caddy cobre isso automaticamente); não deveria ficar sem
+      domínio/HTTPS por muito tempo, mesmo sendo um sistema interno.
 - [ ] Testado no navegador: abrir o sistema, editar um óleo, importar um
       XML pequeno de teste, fechar um dia, e apagar esse dado de teste do
       banco ao final (mesma rotina usada durante o desenvolvimento).
@@ -329,9 +349,6 @@ de vida dos containers).
 
 ## Pontos em aberto deste documento
 
-- **HTTPS** (seção 7) — decisão de qual abordagem usar (proxy Caddy dentro
-  do Docker, SSL gerenciado pela Hostinger, ou outra) ainda não foi
-  tomada.
 - **Cópia externa do backup** (seção 10) — mesmo ponto já registrado em
   `docs/docker-compose.md` seção 2.1/8, depende da hospedagem final.
 - **Deploy automatizado** (seção 11 hoje é manual, `git pull` + rebuild na
