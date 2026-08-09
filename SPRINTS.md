@@ -758,6 +758,88 @@ seguro uma pessoa/uma sessão só levar do início ao fim.
   seção 8 de `docs/docker-compose.md` — só falta a decisão de cópia
   externa.
 
+### 🐛 Bugs encontrados ao validar o ambiente de dev após mudanças recentes — CORRIGIDOS em 2026-08-09
+
+- **Hot reload do Vite não disparava no Windows.** O bind mount do Docker
+  Desktop no Windows não propaga eventos de sistema de arquivos pro
+  container — o watcher padrão do Vite (`chokidar`) nunca via as mudanças
+  salvas no host, embora o arquivo já estivesse atualizado *dentro* do
+  container (confirmado via `docker compose exec frontend grep ...`).
+  Corrigido em `frontend/vite.config.ts` com `server.watch.usePolling:
+  true`.
+- **Importação de XML (e qualquer outra chamada à API) retornando
+  `Falha na requisição (HTTP 404)` em dev.** Regressão introduzida pela
+  mudança de `frontend/Dockerfile` para Caddy (seção "HTTPS via Caddy"
+  abaixo): o `ARG VITE_API_URL=""` tinha virado `ENV` persistente no
+  estágio `build`, que é o **mesmo estágio reaproveitado pelo dev**
+  (`docker-compose.override.yml`, `target: build` + `npm run dev`). Como
+  o fallback do código (`?? "http://localhost:8000"`) só dispara em
+  `undefined`/`null` e não em string vazia, toda chamada à API em dev
+  passou a usar caminho relativo (`/api/v1/...`), batendo no próprio Vite
+  (porta 5173, que não tem essas rotas) em vez do backend (porta 8000) —
+  daí o 404. Corrigido passando `VITE_API_URL` só para o `RUN npm run
+  build` (`RUN VITE_API_URL=$VITE_API_URL npm run build`), sem `ENV`
+  persistente — em produção continua funcionando igual (caminho relativo,
+  resolvido pelo Caddy), e em dev volta a cair no fallback
+  `localhost:8000`. **Verificado:** `docker compose exec frontend sh -c
+  'echo $VITE_API_URL'` vazio de novo, bundle servido pelo Vite mostra
+  `import.meta.env` sem `VITE_API_URL`, e `curl -X POST .../importar-xml`
+  direto no backend (porta 8000) responde normalmente com o header CORS
+  correto para `http://localhost:5173`.
+
+### Ajustes de estabilidade visual pós-redesign — 2026-08-09
+
+- [x] **Tremida ao trocar de aba** (o título "Scania Inventário" mudava de
+      posição): causada pela barra de rolagem vertical aparecer/sumir entre
+      páginas de altura diferente, empurrando o layout centralizado
+      (`max-width` + `margin:auto`) alguns pixels pro lado. Corrigido com
+      `scrollbar-gutter: stable` em `html` — o espaço da barra fica sempre
+      reservado, mude ou não de altura a página.
+- [x] **Campo "Físico" desalinhado entre linhas da lista de peças**
+      (`PecaListItem`/`.peca-numeros`): o bloco de números ficava ancorado à
+      direita (`justify-content: space-between`), e como "Sistema"/
+      "Diferença" variam de largura conforme a quantidade de dígitos, o
+      campo "Físico" (primeiro da linha) acabava em posições diferentes de
+      peça pra peça. Corrigido dando largura fixa (`flex: 0 0 <valor>`) a
+      cada campo do bloco (`label` do Físico, `.peca-sistema`,
+      `.peca-diferenca`), garantindo a mesma posição horizontal em toda a
+      lista.
+
+### Repaginada visual do frontend — decidida e implementada em 2026-08-09
+
+- [x] Redesign puramente visual/CSS de `frontend/src/index.css` (mesma
+      paleta de cor de antes, sem cor de marca nova — só tons neutros,
+      sombras e opacidades derivadas dela): fontes sans-serif reforçadas
+      (`Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`)
+      em toda a aplicação, incluindo a folha de impressão (`@media print`
+      continua em `Arial, Helvetica, sans-serif`); transições suaves em
+      hover/focus de cards, botões e inputs; animações de entrada
+      (fade+slide, `@keyframes fade-slide-up`) em `.oleo-card`,
+      `.peca-list-item`, `.historico-list-item`,
+      `.importacoes-historico-item` e `.summary-card`; `ComparisonBar` com
+      `transition: width` na barra de físico/sistema; `SaveStatusIndicator`
+      com um ponto pulsante (`@keyframes pulse-dot`) durante "Salvando...";
+      `TabNav` com indicador de aba ativa animado (`.tab::after`,
+      `transform: scaleX`) em vez de só trocar de cor; `ConfirmDialog` /
+      `AlertDialog` / `ImportSummaryDialog` (todos via `.dialog-overlay` +
+      `.dialog`) com fade do overlay + `backdrop-filter: blur(3px)` e
+      fade+scale do diálogo (`@keyframes overlay-fade-in`,
+      `@keyframes dialog-pop-in`); sombras em camadas (`--shadow-xs/sm/md/lg`)
+      e raios consistentes (`--radius-sm/md/lg/pill`) via variáveis CSS no
+      `:root`. Todas as animações não essenciais (entradas, pulsação,
+      indicador de aba, hover com `transform`, diálogos) ficam dentro de
+      `@media (prefers-reduced-motion: no-preference)`; transições simples
+      de cor/borda continuam fora desse bloco por serem sutis demais para
+      caracterizar "movimento". Nenhum componente React mudou de
+      comportamento/lógica — só `frontend/src/index.css` foi reescrito.
+      `npm run build` verificado sem erros.
+- Suposição de UX registrada: como `.search-input`/`.observacao-input`
+  (usados por `SearchInput`/`ObservacaoInput`) não tinham nenhum estilo
+  próprio antes (só herdavam o input "cru" do navegador), foram
+  adicionadas regras consistentes com os demais inputs da aplicação
+  (mesma borda, raio, padding, foco) — não havia decisão anterior
+  documentada sobre a aparência desses dois campos especificamente.
+
 ---
 
 ## Log de decisões tomadas durante a implementação
