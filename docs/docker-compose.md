@@ -28,6 +28,7 @@ sistema-inventario-scania/
 | Serviço | Papel | Baseado em | Porta padrão |
 |---|---|---|---|
 | `db` | Banco de dados | Imagem oficial `postgres` | `5432` |
+| `migrate` | Roda a migração Alembic + seed do catálogo e sai | Mesma imagem do `backend` (`Dockerfile` de `backend/`), comando diferente | nenhuma |
 | `backend` | API (FastAPI) | `Dockerfile` próprio, em `backend/` | `8000` |
 | `frontend` | Interface (React) | `Dockerfile` próprio, em `frontend/` | `5173` (dev) / `80` (produção) |
 
@@ -78,10 +79,24 @@ e se enxergam pelo **nome do serviço** (`db`, `backend`) em vez de
 - **Depende de:** `db`, com a condição de que o healthcheck do banco tenha
   passado (`condition: service_healthy`), não apenas que o container tenha
   iniciado.
-- **Migrações do banco (Alembic):** este documento não define ainda se as
-  migrações rodam automaticamente na subida do container (`entrypoint` que
-  roda `alembic upgrade head` antes de iniciar o servidor) ou como um passo
-  manual/separado — ver ponto em aberto na seção 8.
+- **Migrações do banco (Alembic) — decidido em 2026-08-09:** rodam num
+  serviço `migrate` separado, não no `entrypoint`/`CMD` do próprio
+  `backend`. Esse serviço usa a mesma imagem do `backend` (mesmo
+  `Dockerfile`, em `backend/`), mas sobrescreve o comando para `alembic
+  upgrade head && python -m app.seed_items` — nessa ordem, porque as
+  colunas geradas `diferenca`/`status` (`docs/banco-de-dados.md`) só
+  existem de fato via `sa.Computed(...)` depois da migração; se o seed
+  rodasse antes, o banco ficaria sem essas colunas geradas corretamente. O
+  `migrate` roda uma única vez e sai (`restart: "no"`); o `backend` só sobe
+  depois, com `depends_on: migrate: condition: service_completed_successfully`
+  (além de continuar dependendo de `db: condition: service_healthy`).
+  Motivo de ser um serviço à parte, em vez de rodar no `entrypoint` do
+  `backend`: isola uma falha de migração de uma falha de subida da API —
+  se o `alembic upgrade head` falhar, o `backend` nunca chega a subir com
+  um schema incompleto, em vez de subir "quebrado" e falhar só na primeira
+  query. Isso também resolve, de graça, o problema de `docker compose up`
+  do zero subir com o banco vazio (antes, migração e seed precisavam ser
+  rodados à mão depois do primeiro `up`).
 
 ---
 
@@ -164,10 +179,8 @@ formas fica registrada como ponto em aberto (seção 8).
 
 ## 8. Pontos em aberto para quem for implementar
 
-- **Onde as migrações do Alembic rodam** — automaticamente na subida do
-  `backend`, ou como um comando manual/`job` separado. Rodar
-  automaticamente é mais conveniente no dia a dia, mas mais arriscado em
-  produção (uma migração com problema derruba a subida do serviço todo).
+- ~~Onde as migrações do Alembic rodam~~ — **resolvido em 2026-08-09**, ver
+  seção 3: serviço `migrate` separado, com `backend` dependendo dele.
 - **Formato exato do arquivo de produção** — `docker-compose.prod.yml`
   separado, ou só rodar o `docker-compose.yml` base ignorando o override.
 - **Onde os backups do volume do Postgres são guardados**, e com que
