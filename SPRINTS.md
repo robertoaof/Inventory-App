@@ -689,6 +689,29 @@ seguro uma pessoa/uma sessão só levar do início ao fim.
   devolvido ao estado de desenvolvimento (`.env` restaurado, `docker
   compose up --build -d` com base + override) ao final.
 
+### Backup do Postgres — decidido e implementado em 2026-08-09
+
+- [x] **Frequência/retenção** (decisão da pessoa): diário, mantendo os
+      últimos 7 dias.
+- [x] **Onde ficam guardados** (decisão da pessoa): por enquanto só disco
+      local (volume nomeado `backup_data`, mesmo padrão do `db_data`) — a
+      cópia externa (S3/Backblaze/outro servidor) fica em aberto para
+      quando a hospedagem final for decidida.
+- Criado `scripts/backup-postgres.sh` (roda `pg_dump` + `gzip`, aplica a
+  retenção com `find -mtime +7 -delete`, comentário com o comando de
+  restauração) e o serviço `backup` em `docker-compose.prod.yml` (imagem
+  `postgres:16`, monta o script + o volume `backup_data`, dump ao subir e
+  a cada 24h). Não é um cron de horário fixo — a imagem `postgres:16` não
+  tem `cron` instalado; documentado como alternativa se um horário exato
+  importar. **Verificado em 2026-08-09:** `docker compose -f
+  docker-compose.yml -f docker-compose.prod.yml up -d db migrate backup`
+  gerou `invcontra_2026-08-09_180203.sql.gz` em segundos; conferido que é
+  um dump SQL válido (`gunzip -c ... | head` mostrou o cabeçalho padrão do
+  `pg_dump`). Volume de teste removido ao final; ambiente devolvido ao
+  estado de desenvolvimento. Resolve, em parte, o ponto em aberto da
+  seção 8 de `docs/docker-compose.md` — só falta a decisão de cópia
+  externa.
+
 ---
 
 ## Log de decisões tomadas durante a implementação

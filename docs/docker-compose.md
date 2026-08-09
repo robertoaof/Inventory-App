@@ -32,6 +32,7 @@ sistema-inventario-scania/
 | `migrate` | Roda a migração Alembic + seed do catálogo e sai | Mesma imagem do `backend` (`Dockerfile` de `backend/`), comando diferente | nenhuma |
 | `backend` | API (FastAPI) | `Dockerfile` próprio, em `backend/` | `8000` |
 | `frontend` | Interface (React) | `Dockerfile` próprio, em `frontend/` | `5173` (dev) / `80` (produção) |
+| `backup` | Backup diário do Postgres (`pg_dump`), só em produção | Imagem `postgres:16` + `scripts/backup-postgres.sh` | nenhuma |
 
 Os três sobem numa mesma rede interna criada automaticamente pelo Compose,
 e se enxergam pelo **nome do serviço** (`db`, `backend`) em vez de
@@ -59,6 +60,34 @@ e se enxergam pelo **nome do serviço** (`db`, `backend`) em vez de
   Postgres já esteja *pronto para aceitar conexões*. Sem o healthcheck, o
   `backend` pode subir antes do banco estar realmente disponível e falhar
   na primeira tentativa de conexão.
+
+### 2.1 Backups — decidido em 2026-08-09
+
+- **Frequência e retenção:** diário, mantendo os últimos **7 dias** — depois
+  disso o backup mais antigo é apagado automaticamente. Cobre o caso comum
+  de "percebi o erro alguns dias depois" sem acumular espaço em disco
+  indefinidamente.
+- **Onde ficam guardados hoje:** só em disco local, no volume nomeado
+  `backup_data` (serviço `backup`, `docker-compose.prod.yml`) — mesmo
+  padrão do `db_data`. **Cópia externa (S3/Backblaze/outro servidor) ainda
+  não foi decidida** — fica para quando a hospedagem final for definida
+  (seção 5); a rotina local já funciona sozinha, então adicionar um passo
+  de upload externo depois é aditivo, não uma reescrita.
+- **Como funciona:** `scripts/backup-postgres.sh` roda dentro do serviço
+  `backup` (imagem `postgres:16`, que já tem `pg_dump`), gera
+  `invcontra_AAAA-MM-DD_HHMMSS.sql.gz` em `/backups` e apaga o que passou
+  de 7 dias. O serviço faz um dump assim que sobe e repete a cada 24h
+  (`while true; do ...; sleep 86400; done`) — **não é um agendamento de
+  horário fixo** (a imagem `postgres:16` não tem `cron` instalado); se um
+  horário específico do dia importar, trocar por um cron do host chamando
+  `docker compose exec backup sh /scripts/backup-postgres.sh`.
+- **Restaurar um backup:** `gunzip -c invcontra_AAAA-MM-DD_HHMMSS.sql.gz |
+  docker compose exec -T db psql -U $POSTGRES_USER -d $POSTGRES_DB`
+  (comentado também no topo do próprio script).
+- **Verificado em 2026-08-09:** `docker compose -f docker-compose.yml -f
+  docker-compose.prod.yml up -d db migrate backup` gerou um dump válido em
+  segundos (`pg_dump`/`gunzip` confirmados na prática), salvo no volume
+  `backup_data`.
 
 ---
 
@@ -209,10 +238,11 @@ produção), o padrão recomendado é:
   seção 3: serviço `migrate` separado, com `backend` dependendo dele.
 - ~~Formato exato do arquivo de produção~~ — **resolvido em 2026-08-09**,
   ver seção 7: `docker-compose.prod.yml` explícito.
-- **Onde os backups do volume do Postgres são guardados**, e com que
-  frequência — não é escopo deste documento (é operação, não arquitetura),
-  mas precisa de uma resposta antes de qualquer ambiente ir pra produção de
-  verdade.
+- ~~Onde os backups do volume do Postgres são guardados, e com que
+  frequência~~ — **parcialmente resolvido em 2026-08-09**, ver seção 2.1:
+  diário, retenção de 7 dias, disco local (volume `backup_data`). **Ainda
+  em aberto:** se/quando adicionar cópia externa (S3/Backblaze/outro
+  servidor) — só decidido junto com a hospedagem final.
 - **Se o `frontend` continua existindo como serviço Docker em produção**,
   ou se — no caso de hospedagem gerenciada tipo Vercel/Netlify (opção "b"
   já discutida) — ele simplesmente deixa de fazer parte do Compose de

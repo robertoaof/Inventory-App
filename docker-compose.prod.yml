@@ -14,3 +14,34 @@ services:
 
   frontend:
     restart: unless-stopped
+
+  # Backup diário do Postgres via pg_dump, com retenção de 7 dias
+  # (decisão da pessoa, 2026-08-09). Guarda no volume nomeado backup_data
+  # — disco local por enquanto; onde exatamente esse disco mora (VPS
+  # própria, com ou sem cópia externa) ainda depende da hospedagem final
+  # (ver docs/docker-compose.md seção 5), mas a rotina já fica pronta.
+  # Roda o dump assim que sobe e depois a cada 24h — não é um cron de
+  # horário fixo (a imagem postgres:16 não tem cron instalado); se um
+  # horário fixo específico importar, trocar por um cron do host chamando
+  # `docker compose exec backup sh /scripts/backup-postgres.sh`.
+  backup:
+    image: postgres:16
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./scripts/backup-postgres.sh:/scripts/backup-postgres.sh:ro
+      - backup_data:/backups
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        while true; do
+          sh /scripts/backup-postgres.sh
+          sleep 86400
+        done
+    restart: unless-stopped
+
+volumes:
+  backup_data:
