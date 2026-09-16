@@ -1122,3 +1122,14 @@ seguro uma pessoa/uma sessão só levar do início ao fim.
   ociosidade, e migração Alembic deixa de ser automática (o serviço
   `migrate` do compose não existe na Vercel — passa a ser passo manual
   antes de cada deploy que mexa em schema) → 2026-09-16.
+- [Infra/nuvem] Banco do Supabase provisionado e migrado (projeto
+  `fodtdcdratwglkmbvnia`, São Paulo, plano Free): `alembic upgrade head` +
+  `seed_items` aplicados e verificados via MCP — 4 tabelas + 11 itens do
+  catálogo fixo, `alembic_version = 0001_initial`, colunas `diferenca` e
+  `status` como GENERATED ALWAYS. Armadilha que custou seis tentativas e
+  vale registrar: o botão **Reset database password** do painel do
+  Supabase não aplica a troca neste projeto (o painel mostra a senha nova,
+  o `pg_authid` mantém a antiga), e `ALTER USER` pelo SQL Editor falha com
+  `42501` porque o papel `postgres` não é superusuário. A senha válida é a
+  definida na criação do projeto. Detalhes em `docs/estado-da-migracao.md`
+  seção 5 → 2026-09-16.

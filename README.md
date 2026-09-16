@@ -33,6 +33,7 @@ Compose para desenvolvimento e produção (VPS). Detalhes de arquitetura em
 | `SPRINTS.md` | Backlog vivo do projeto, por sprint, com checkboxes e log de decisões tomadas durante a implementação |
 | `.env.example` | Modelo de variáveis de ambiente para o Docker Compose (Postgres, `DATABASE_URL`, `CORS_ORIGINS`, `DOMAIN`/`ACME_EMAIL` de produção). Copiar para `.env` (não versionado) antes de rodar |
 | `.gitignore` | Padrões ignorados pelo Git (`__pycache__/`, `node_modules/`, `dist/`, `.env`, etc.) |
+| `.mcp.json` | Servidores MCP do projeto — registra o MCP do Supabase (projeto `fodtdcdratwglkmbvnia`) usado na migração para inspecionar o banco sem precisar da senha. Pede aprovação e login OAuth na primeira sessão de cada máquina |
 | `docker-compose.yml` | Definição base dos serviços Docker: `db` (Postgres 16), `migrate` (roda Alembic + seed e sai), `backend` (FastAPI), `frontend` (build de produção via Caddy). Usada sozinha = ambiente de produção "crua" |
 | `docker-compose.override.yml` | Sobrescreve a base **automaticamente** em desenvolvimento (Compose carrega os dois por padrão): hot-reload do backend (`--reload`, volume montado), Vite dev server do frontend na porta 5173 |
 | `docker-compose.prod.yml` | Ajustes exclusivos de produção, carregados só sob pedido explícito (`-f docker-compose.yml -f docker-compose.prod.yml`): `restart: unless-stopped`, 5 workers do Uvicorn, HTTPS via Caddy (portas 80/443, volumes de certificado), serviço `backup` (dump diário do Postgres) |
@@ -64,6 +65,7 @@ Compose para desenvolvimento e produção (VPS). Detalhes de arquitetura em
 | `docs/preparativos-vps.md` | Roteiro passo a passo de deploy numa VPS (Hostinger) — o deploy oficial atual |
 | `docs/migracao-vercel-supabase.md` | Proposta (não implementada) de migração de infraestrutura para Vercel + Supabase, com conflitos técnicos e pontos em aberto identificados — a **análise** da mudança |
 | `docs/deploy-vercel-supabase.md` | Roteiro passo a passo da migração para Vercel + Supabase, do zero (criar contas) ao cutover — a **execução**, com as três opções de hospedagem do backend (Vercel, Render, VPS atual) |
+| `docs/estado-da-migracao.md` | **Onde a migração parou**: o que já está pronto, o que falta, como preparar outra máquina para continuar, e as armadilhas já encontradas (reset de senha do Supabase que não aplica, disjuntor do pooler, IPv6). Leia este primeiro ao retomar |
 | `docs/contagem_oleo.html` | Protótipo HTML original do sistema — referência de comportamento visual/UX (cores de status, textos, formato de data BR), **não** de arquitetura |
 
 ## `backend/` — API (FastAPI + SQLAlchemy + Alembic)

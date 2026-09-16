@@ -6,5 +6,8 @@
       "Bash(wsl -l)",
       "Bash(npm -v)"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "supabase"
+  ]
 }
