@@ -1102,3 +1102,15 @@ seguro uma pessoa/uma sessão só levar do início ao fim.
   a mudança. Não corrigido (não afeta o produto, só o ciclo de
   desenvolvimento). Se incomodar, a saída usual é
   `server.watch.usePolling: true` no `vite.config.ts` → 2026-08-03.
+- [Infra/nuvem] Escrito `docs/deploy-vercel-supabase.md`: roteiro passo a
+  passo da migração para Vercel + Supabase, do zero (criar contas) ao
+  cutover. A pessoa pediu que as **três** opções de hospedagem do backend
+  fossem documentadas em vez de uma só (tudo na Vercel / Vercel + Render /
+  Vercel + VPS atual), então nenhuma foi escolhida — a decisão segue em
+  aberto. Dois fatos novos levantados na pesquisa e registrados no
+  roteiro: (1) os XMLs de peças importados na prática ficam **abaixo de 1
+  MB**, confirmado pela pessoa, o que tira o teto de 4,5 MB da Vercel do
+  caminho crítico; (2) o plano Hobby (grátis) da Vercel é restrito a uso
+  **não comercial**, então qualquer opção que use Vercel exige o plano Pro
+  (US$ 20/mês) — isso muda a conta de custo da migração e estava fora do
+  radar da proposta original → 2026-09-16.

@@ -8,6 +8,12 @@
 >
 > Elaborado em 2026-09-15, a pedido da pessoa, junto de uma varredura por
 > arquivos não utilizados no repositório (seção 1).
+>
+> **Roteiro prático:** este documento é a *análise* da migração (o que
+> muda, o que quebra, o que conflita). O passo a passo de *execução* —
+> criar as contas do zero, configurar cada plataforma, validar e fazer o
+> cutover — está em `docs/deploy-vercel-supabase.md`, escrito em
+> 2026-09-16 cobrindo as três opções de hospedagem do backend.
 
 ---
 
@@ -109,6 +115,14 @@ pessoa em 2026-08-05). O limite de corpo de requisição de uma **Vercel
 Function é 4.5 MB** — um XML de peças um pouco maior que isso já não chega
 nem a acionar a validação `422` que o backend implementa hoje, é
 rejeitado pela própria plataforma antes.
+
+**Atualização de 2026-09-16:** a pessoa confirmou que os XMLs de peças
+importados na prática ficam **abaixo de 1 MB**, ou seja, o teto de 4,5 MB
+nunca seria atingido no uso real. O conflito continua existindo no papel
+(o limite documentado de 10 MB deixa de ser verdade se o backend for pra
+Vercel, e o erro de estouro não seguiria o envelope `{ "erro": {...} }` do
+projeto), mas deixa de ser um bloqueio prático para a opção "tudo na
+Vercel". Ver `docs/deploy-vercel-supabase.md`, seção 4A.5.
 
 **Isso é um ponto em aberto, não uma decisão minha.** Alternativas
 possíveis (a escolher pela pessoa, não decidido aqui):

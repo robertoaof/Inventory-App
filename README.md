@@ -62,7 +62,8 @@ Compose para desenvolvimento e produção (VPS). Detalhes de arquitetura em
 | `docs/componentes-react.md` | Árvore de componentes React e a responsabilidade de cada um |
 | `docs/docker-compose.md` | Especificação dos serviços Docker (o "porquê" por trás dos arquivos `docker-compose*.yml`) |
 | `docs/preparativos-vps.md` | Roteiro passo a passo de deploy numa VPS (Hostinger) — o deploy oficial atual |
-| `docs/migracao-vercel-supabase.md` | Proposta (não implementada) de migração de infraestrutura para Vercel + Supabase, com conflitos técnicos e pontos em aberto identificados |
+| `docs/migracao-vercel-supabase.md` | Proposta (não implementada) de migração de infraestrutura para Vercel + Supabase, com conflitos técnicos e pontos em aberto identificados — a **análise** da mudança |
+| `docs/deploy-vercel-supabase.md` | Roteiro passo a passo da migração para Vercel + Supabase, do zero (criar contas) ao cutover — a **execução**, com as três opções de hospedagem do backend (Vercel, Render, VPS atual) |
 | `docs/contagem_oleo.html` | Protótipo HTML original do sistema — referência de comportamento visual/UX (cores de status, textos, formato de data BR), **não** de arquitetura |
 
 ## `backend/` — API (FastAPI + SQLAlchemy + Alembic)
