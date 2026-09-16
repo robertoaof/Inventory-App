@@ -102,6 +102,11 @@ pontos acima sem que a pessoa peça explicitamente.
 
 ## Como trabalhar neste repositório
 
+- `README.md` (raiz) documenta o que cada arquivo do repositório faz.
+  **Sempre que uma tarefa criar, apagar, renomear ou mudar claramente a
+  responsabilidade de um arquivo, atualize a linha correspondente no
+  `README.md` no mesmo commit/sessão** — não deixe para depois. Isso vale
+  para `backend-dev` e `frontend-dev` também, não só para quem orquestra.
 - Antes de começar qualquer tarefa, abra `SPRINTS.md` e confirme qual é a
   próxima tarefa não concluída do sprint atual.
 - Prefira delegar implementação de backend ao subagente `backend-dev` e de
