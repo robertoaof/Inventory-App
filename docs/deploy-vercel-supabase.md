@@ -53,10 +53,21 @@ Então a migração se parte em duas perguntas independentes:
 
 ### 0.3 As três opções para o backend
 
-| | Opção A — Tudo na Vercel | Opção B — Vercel + Render | Opção C — Vercel + VPS atual |
+> **Correção de premissa (2026-09-16):** este documento foi escrito
+> assumindo que o sistema já rodava numa VPS Hostinger e que a migração
+> substituiria um ambiente em produção. **Isso não é verdade** — a VPS
+> nunca foi contratada, o roteiro de `docs/preparativos-vps.md` nunca foi
+> executado, e até hoje o sistema só rodou em `localhost`. Portanto:
+> qualquer opção abaixo é o **primeiro deploy de produção** do projeto, não
+> uma troca de hospedagem. A Opção C deixa de ser "aproveitar o que já
+> existe" e passa a significar "contratar e configurar uma VPS do zero".
+> As seções 10 e 11 já foram corrigidas; trechos que falem em "VPS atual"
+> ou em rollback para ela devem ser lidos com essa ressalva.
+
+| | Opção A — Tudo na Vercel | Opção B — Vercel + Render | Opção C — Vercel + VPS |
 |---|---|---|---|
 | Frontend | Vercel | Vercel | Vercel |
-| Backend FastAPI | Vercel (função serverless) | Render (processo sempre ligado) | VPS Hostinger (Docker, como hoje) |
+| Backend FastAPI | Vercel (função serverless) | Render (processo sempre ligado) | VPS Hostinger (Docker, a contratar) |
 | Banco | Supabase | Supabase | Supabase |
 | Uma plataforma só? | Sim | Não (duas) | Não (duas + VPS) |
 | Limite de upload de XML | 4,5 MB (teto da plataforma) | Sem teto da plataforma | Sem teto da plataforma |
@@ -100,12 +111,15 @@ usado comercialmente (com as limitações de backup descritas na seção 9).
   não pede cartão).
 - Uns 90 minutos tranquilos para a primeira vez.
 
-### 0.6 Regra de ouro durante toda a migração
+### 0.6 Regra de ouro
 
-**Não desligue nada do ambiente atual até o novo estar validado.** A VPS
-continua no ar, atendendo as pessoas, enquanto você monta o ambiente novo
-em paralelo. Só depois de rodar o checklist da seção 6 inteiro é que faz
-sentido pensar em cutover. A seção 10 cobre como voltar atrás.
+Como não existe ambiente antigo no ar (ver a correção acima), não há o
+cuidado usual de manter dois sistemas em paralelo. A regra que sobra é
+mais simples: **só divulgue o endereço para as pessoas depois de rodar o
+checklist da seção 6 inteiro.** Enquanto ninguém estiver usando, o banco só
+tem dado de teste e qualquer coisa pode ser refeita do zero sem prejuízo —
+inclusive recriar o projeto do Supabase. Depois que as contagens reais
+começarem, isso deixa de ser verdade.
 
 ---
 
@@ -567,12 +581,17 @@ não um erro.
 
 ---
 
-## 4C. Backend continua na VPS (Opção C)
+## 4C. Backend numa VPS (Opção C)
 
 > Faça a seção 2 antes desta. **Não** faça a seção 3.
 
-Aqui só o banco sai da VPS. O backend continua exatamente como está,
-rodando no Docker que você já configurou.
+> ⚠️ **Esta seção pressupõe uma VPS já montada — e ela não existe.** Antes
+> de qualquer passo daqui, você precisa contratar a VPS e executar
+> `docs/preparativos-vps.md` por inteiro (contratar, Ubuntu, SSH, Docker,
+> firewall, domínio, Caddy). Só depois o que está descrito abaixo faz
+> sentido. Os comandos a seguir assumem esse ambiente pronto.
+
+Nesta opção o banco fica no Supabase e o backend roda em Docker na VPS.
 
 ### 4C.1 Apontar o backend para o Supabase
 
@@ -620,16 +639,19 @@ correto.
 
 ### 4C.4 Vale a pena?
 
-Sendo honesto: **esta opção entrega pouco**. Você troca um Postgres local
-(rápido, no mesmo host, com o backup diário de `scripts/backup-postgres.sh`
-já funcionando) por um banco que fica a um salto de rede de distância, e
-continua mantendo e pagando a VPS. O ganho é não cuidar mais do Postgres à
-mão; o custo é latência em toda consulta e uma peça a mais para monitorar.
+Sendo honesto: **esta é a opção com pior relação custo/benefício das três**.
+Você monta uma VPS inteira — com todo o trabalho de administração que isso
+implica — e ainda assim deixa o banco fora dela, ganhando latência de rede
+em toda consulta e uma peça a mais para monitorar.
 
-Ela faz sentido em dois casos: se você quer o painel do Supabase para
-inspecionar dados sem SSH, ou como **etapa intermediária** — migra o banco
-primeiro, confirma que a aplicação funciona contra ele, e só depois move o
-backend (virando a Opção A ou B). Como passo de transição, é uma boa ideia.
+Se você vai administrar uma VPS de qualquer jeito, faz mais sentido rodar
+o Postgres nela também (é o que `docs/preparativos-vps.md` descreve, com
+backup diário via `scripts/backup-postgres.sh`) e dispensar o Supabase.
+E se você não quer administrar servidor, as opções A e B resolvem isso
+melhor.
+
+O caso em que ela se justifica é estreito: você quer o painel do Supabase
+para inspecionar dados sem SSH, e aceita pagar latência por isso.
 
 ---
 
@@ -880,31 +902,30 @@ provavelmente é o caminho mais sensato.
 
 ## 10. Como voltar atrás
 
-Enquanto a VPS estiver no ar com o Postgres dela intacto, o rollback é
-trivial: **pare de usar a URL da Vercel e volte a usar a da VPS**. Nada
-foi apagado.
+> **Corrigido em 2026-09-16:** esta seção descrevia um rollback para a VPS
+> e um período de convivência entre dois ambientes. **Nada disso se
+> aplica** — não existe ambiente antigo. O sistema nunca foi ao ar; este
+> deploy é o primeiro.
 
-Por isso a recomendação de 0.6: mantenha os dois ambientes vivos em
-paralelo por um período — **duas semanas de uso real** é um bom número,
-porque cobre um fechamento de mês e alguns dias de pico.
+Como não há sistema em produção, também não há o risco que normalmente
+torna um cutover delicado: ninguém perde acesso, nenhum dado existente
+corre risco, e não há dois bancos divergindo em paralelo. Isso simplifica
+bastante a virada — na prática, "ir ao ar" é só passar o endereço para as
+pessoas pela primeira vez.
 
-O detalhe que exige atenção: durante a convivência, **os dois bancos
-recebem dados diferentes**. Se as pessoas usaram o ambiente novo por uma
-semana e você decidir voltar, as contagens desse período estão no Supabase
-e **não** na VPS. Então: escolha um dia de virada, avise quem usa, e a
-partir dele use **só um** dos dois. Ambiente antigo vira consulta, nunca
-escrita.
+O que ainda vale cuidar:
 
-Para desligar de vez, só depois do período de observação:
-
-```bash
-ssh root@SEU_IP
-cd /caminho/do/projeto
-docker compose -f docker-compose.yml -f docker-compose.prod.yml down
-```
-
-Tire um `pg_dump` final do Postgres da VPS e guarde **antes** de cancelar
-a VPS na Hostinger — depois de cancelada, o disco é apagado.
+- **Antes de divulgar o endereço**, rode o checklist da seção 6 inteiro.
+  Depois que as pessoas começarem a registrar contagens de verdade, o banco
+  passa a ter dado que importa.
+- **Recriar o projeto do Supabase é barato agora e caro depois.** Enquanto
+  o banco só tem dado de teste, apagar e refazer custa dois minutos. Se
+  você pretende trocar a senha do banco (ver `docs/estado-da-migracao.md`,
+  seção 5), faça isso **antes** de divulgar.
+- **Se a Vercel não te agradar**, o caminho de volta não é a VPS que
+  existe — é a VPS que você contrataria, seguindo `docs/preparativos-vps.md`.
+  O código continua compatível com os dois: o modo serverless vem desligado
+  por padrão, e o `docker-compose` nunca deixou de funcionar.
 
 ---
 
@@ -913,24 +934,38 @@ a VPS na Hostinger — depois de cancelada, o disco é apagado.
 Valores de setembro de 2026, em dólar e sem impostos (a Vercel cobra em
 USD; some IOF e variação cambial no cartão).
 
-| Item | Opção A | Opção B | Opção C |
+| Item | Opção A | Opção B | Opção C (VPS) |
 |---|---|---|---|
-| Vercel Pro (obrigatório para uso comercial — ver 0.4) | US$ 20 | US$ 20 | US$ 20 |
-| Backend | incluso na Vercel | Render Starter US$ 7 | VPS que você já paga |
-| Supabase Free | US$ 0 | US$ 0 | US$ 0 |
-| **Total/mês (banco sem backup automático)** | **US$ 20** | **US$ 27** | **US$ 20 + VPS** |
-| Supabase Pro (backup diário — seção 9) | +US$ 25 | +US$ 25 | +US$ 25 |
-| **Total/mês (com backup gerenciado)** | **US$ 45** | **US$ 52** | **US$ 45 + VPS** |
+| Vercel Pro (obrigatório para uso comercial — ver 0.4) | US$ 20 | US$ 20 | — |
+| Backend | incluso na Vercel | Render Starter US$ 7 | incluso na VPS |
+| Banco | Supabase Free US$ 0 | Supabase Free US$ 0 | Postgres na própria VPS |
+| Hospedagem própria | — | — | VPS Hostinger ~R$ 30–50 |
+| **Total/mês (sem backup gerenciado)** | **US$ 20** | **US$ 27** | **~R$ 30–50** |
+| Supabase Pro (backup diário — seção 9) | +US$ 25 | +US$ 25 | não se aplica |
+| **Total/mês (com backup gerenciado)** | **US$ 45** | **US$ 52** | **~R$ 30–50** |
 
-Para comparar: a VPS mais simples da Hostinger sai por algo em torno de
-R$ 30–50/mês e, hoje, já entrega **as três camadas + backup diário**.
+> **Premissa corrigida em 2026-09-16:** versões anteriores desta tabela
+> tratavam a VPS como um custo que você já pagava. **Isso estava errado** —
+> a VPS nunca foi contratada e o sistema nunca foi ao ar; até hoje ele só
+> rodou em `localhost`. Então nenhuma das opções é "manter o que já existe":
+> **todas** são o primeiro deploy de produção do projeto, e a comparação é
+> entre caminhos igualmente novos.
 
-Uma leitura honesta desses números: **a migração não se paga em dinheiro.**
-O que ela compra é outra coisa — não administrar servidor, não renovar
-certificado, não cuidar de disco cheio, deploy por `git push`, e um painel
-para olhar o banco sem SSH. Se essas dores são reais pra você hoje, o custo
-se justifica. Se a VPS está rodando lisa desde o Sprint 7 e ninguém reclama,
-é bem defensável não mexer.
+Com a premissa certa, a leitura muda bastante:
+
+- **A VPS é mais barata em dinheiro** (uma conta em reais, sem dólar nem
+  IOF), mas cobra em trabalho: contratar, configurar Ubuntu, SSH, firewall,
+  apontar domínio, cuidar de atualizações e monitorar disco. O roteiro está
+  pronto em `docs/preparativos-vps.md`, mas nunca foi executado — então o
+  tempo de aprendizado ainda está todo pela frente.
+- **A Vercel é mais cara e quase não cobra trabalho**: `git push` publica,
+  HTTPS e domínio saem de graça, e não há servidor para administrar.
+- O que **não** existe mais como argumento: "já tenho a VPS montada, mudar
+  seria desperdício". Não há nada montado.
+
+Se o orçamento for o critério dominante e você topar a curva de
+aprendizado, a VPS ganha. Se o seu tempo vale mais que a diferença de
+preço, a Vercel ganha. Nenhuma das duas é obviamente errada.
 
 ---
 

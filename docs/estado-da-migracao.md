@@ -77,7 +77,6 @@ Nada disso foi iniciado ainda:
 - [ ] Configurar `VITE_API_URL` no frontend e `CORS_ORIGINS` no backend
 - [ ] Rodar o checklist de verificação de ponta a ponta (seção 6 do roteiro)
 - [ ] Trocar a senha do banco (ver seção 5)
-- [ ] Decidir o destino da VPS atual
 
 O passo a passo detalhado de cada um está em
 `docs/deploy-vercel-supabase.md`, seções 4A e 5.
@@ -209,15 +208,34 @@ comercial**. Este é um sistema de empresa, então a conta precisa ser
 **Pro — US$ 20/mês por usuário**, independentemente de ser só o frontend
 que está hospedado lá.
 
-Isso muda a conta da migração e não estava previsto na proposta original.
-A seção 11 de `docs/deploy-vercel-supabase.md` faz a comparação completa de
-custos — e registra que, puramente por dinheiro, a migração **não se paga**
-frente à VPS atual. O que ela compra é não administrar servidor.
+Isso muda a conta e não estava previsto na proposta original. A seção 11 de
+`docs/deploy-vercel-supabase.md` faz a comparação completa de custos.
 
-Se em algum momento você reavaliar e decidir ficar na VPS, nada do que foi
-feito se perde: o código novo é retrocompatível (o modo serverless vem
-desligado por padrão) e o banco do Supabase pode simplesmente ser
-descartado.
+### Premissa corrigida: não existe VPS
+
+Durante boa parte desta sessão os documentos trataram a migração como a
+substituição de um sistema em produção numa VPS Hostinger. **Isso estava
+errado**, e foi corrigido em 2026-09-16: a VPS nunca foi contratada, o
+roteiro de `docs/preparativos-vps.md` nunca foi executado, e até hoje o
+sistema só rodou em `localhost`.
+
+Consequências práticas:
+
+- **Não há cutover no sentido clássico.** Não existem usuários ativos,
+  dados reais nem dois ambientes em paralelo. "Ir ao ar" é simplesmente
+  passar o endereço para as pessoas pela primeira vez.
+- **Não há rollback para um ambiente anterior.** Se a Vercel não servir, a
+  alternativa é montar a VPS do zero, não voltar para uma que já roda.
+- **A comparação de custo é entre dois caminhos igualmente novos:** Vercel
+  (~US$ 20/mês, quase nenhum trabalho de administração) contra VPS
+  (~R$ 30–50/mês, com toda a configuração e manutenção por sua conta).
+  Nenhuma das duas é obviamente certa — depende de quanto seu tempo vale
+  frente à diferença de preço.
+
+O código é compatível com os dois caminhos: o modo serverless vem desligado
+por padrão e o `docker-compose` nunca deixou de funcionar. Se a escolha
+mudar, nada do que já foi feito se perde — inclusive o banco do Supabase,
+que pode ser descartado sem prejuízo.
 
 ---
 

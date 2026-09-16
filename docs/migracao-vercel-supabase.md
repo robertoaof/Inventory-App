@@ -2,9 +2,14 @@
 
 > **Status: proposta, não implementada.** Este documento existe para
 > preparar a decisão, não substitui `docs/preparativos-vps.md` nem
-> `docs/docker-compose.md` até que a migração seja de fato decidida e
-> executada. Enquanto isso não acontecer, o deploy oficial continua sendo o
-> descrito nesses dois arquivos (VPS Hostinger + Docker + Caddy).
+> `docs/docker-compose.md`.
+>
+> **Correção de 2026-09-16:** este documento afirmava que o deploy oficial
+> "continua sendo" a VPS Hostinger. Isso estava errado — **o sistema nunca
+> foi implantado em lugar nenhum**. A VPS nunca foi contratada e o roteiro
+> de `docs/preparativos-vps.md` nunca foi executado; até hoje o sistema só
+> rodou em `localhost`. Leia as seções 2 e 4 com essa ressalva: elas
+> descrevem a arquitetura *projetada* para a VPS, não uma que esteja no ar.
 >
 > Elaborado em 2026-09-15, a pedido da pessoa, junto de uma varredura por
 > arquivos não utilizados no repositório (seção 1).
@@ -50,8 +55,8 @@ sobrando — não investiguei a fundo por estar fora do pedido original.
 
 ## 2. Por que isso é uma mudança de arquitetura, não só de hospedagem
 
-O sistema foi desenhado e implantado (Sprint 7, decisões de
-2026-08-09) como **três containers Docker num VPS**: Postgres com disco
+O sistema foi desenhado (Sprint 7, decisões de
+2026-08-09) para rodar como **três containers Docker num VPS**: Postgres com disco
 próprio, backend FastAPI de longa duração (Uvicorn, 5 workers) e frontend
 servido por Caddy com HTTPS automático — ver `docs/preparativos-vps.md` e
 `docs/docker-compose.md`. Vercel + Supabase trocam **os dois pilares** ao

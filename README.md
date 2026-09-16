@@ -62,9 +62,9 @@ Compose para desenvolvimento e produção (VPS). Detalhes de arquitetura em
 | `docs/fluxo-de-telas.md` | Fluxo completo de cada tela, incluindo a importação de XML passo a passo |
 | `docs/componentes-react.md` | Árvore de componentes React e a responsabilidade de cada um |
 | `docs/docker-compose.md` | Especificação dos serviços Docker (o "porquê" por trás dos arquivos `docker-compose*.yml`) |
-| `docs/preparativos-vps.md` | Roteiro passo a passo de deploy numa VPS (Hostinger) — o deploy oficial atual |
+| `docs/preparativos-vps.md` | Roteiro passo a passo de deploy numa VPS (Hostinger). **Nunca executado** — escrito no Sprint 7, mas nenhuma VPS chegou a ser contratada; até hoje o sistema só rodou em `localhost` |
 | `docs/migracao-vercel-supabase.md` | Proposta (não implementada) de migração de infraestrutura para Vercel + Supabase, com conflitos técnicos e pontos em aberto identificados — a **análise** da mudança |
-| `docs/deploy-vercel-supabase.md` | Roteiro passo a passo da migração para Vercel + Supabase, do zero (criar contas) ao cutover — a **execução**, com as três opções de hospedagem do backend (Vercel, Render, VPS atual) |
+| `docs/deploy-vercel-supabase.md` | Roteiro passo a passo da migração para Vercel + Supabase, do zero (criar contas) ao cutover — a **execução**, com as opções de hospedagem do backend (Vercel serverless ou Render) |
 | `docs/estado-da-migracao.md` | **Onde a migração parou**: o que já está pronto, o que falta, como preparar outra máquina para continuar, e as armadilhas já encontradas (reset de senha do Supabase que não aplica, disjuntor do pooler, IPv6). Leia este primeiro ao retomar |
 | `docs/contagem_oleo.html` | Protótipo HTML original do sistema — referência de comportamento visual/UX (cores de status, textos, formato de data BR), **não** de arquitetura |
 

@@ -1133,3 +1133,15 @@ seguro uma pessoa/uma sessão só levar do início ao fim.
   `42501` porque o papel `postgres` não é superusuário. A senha válida é a
   definida na criação do projeto. Detalhes em `docs/estado-da-migracao.md`
   seção 5 → 2026-09-16.
+- [Infra/nuvem] **Correção de premissa:** a documentação de infraestrutura
+  (README, `migracao-vercel-supabase.md`, `deploy-vercel-supabase.md`,
+  `estado-da-migracao.md`) afirmava que o sistema estava implantado numa VPS
+  Hostinger e que a migração substituiria um ambiente em produção. A pessoa
+  esclareceu que **a VPS nunca foi contratada** — o roteiro de
+  `preparativos-vps.md` foi escrito no Sprint 7 mas nunca executado, e o
+  sistema só rodou em `localhost`. Consequências corrigidas nos docs: não há
+  cutover clássico nem rollback para ambiente anterior; a Opção C deixa de ser
+  "aproveitar o que existe" e vira "contratar VPS do zero"; e a tabela de
+  custos passa a comparar dois caminhos igualmente novos (Vercel ~US$ 20/mês
+  vs. VPS ~R$ 30–50/mês + administração) em vez de tratar a VPS como custo já
+  pago → 2026-09-16.
