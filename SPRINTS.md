@@ -1114,3 +1114,11 @@ seguro uma pessoa/uma sessão só levar do início ao fim.
   **não comercial**, então qualquer opção que use Vercel exige o plano Pro
   (US$ 20/mês) — isso muda a conta de custo da migração e estava fora do
   radar da proposta original → 2026-09-16.
+- [Infra/nuvem] Migração para nuvem: escolhida a **Opção A** do
+  `docs/deploy-vercel-supabase.md` — frontend e backend FastAPI ambos na
+  Vercel (função serverless), banco no Supabase. Consequências aceitas:
+  limite real de upload de XML cai para 4,5 MB (irrelevante na prática,
+  os XMLs ficam abaixo de 1 MB), cold start no primeiro autosave após
+  ociosidade, e migração Alembic deixa de ser automática (o serviço
+  `migrate` do compose não existe na Vercel — passa a ser passo manual
+  antes de cada deploy que mexa em schema) → 2026-09-16.

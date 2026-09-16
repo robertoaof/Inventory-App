@@ -92,6 +92,7 @@ Compose para desenvolvimento e produção (VPS). Detalhes de arquitetura em
 | `frontend/package.json` / `package-lock.json` | Dependências e scripts npm (`dev`, `build`, etc.) |
 | `frontend/tsconfig.json` / `tsconfig.node.json` | Configuração do compilador TypeScript (app e ferramentas de build, respectivamente) |
 | `frontend/vite.config.ts` | Configuração do Vite (bundler/dev server) |
+| `frontend/vercel.json` | Configuração da Vercel para o frontend: reescreve qualquer rota para `/index.html`, para o `react-router` funcionar ao abrir `/historico` direto ou dar F5 (equivalente ao `try_files` do `Caddyfile`) |
 | `frontend/index.html` | HTML raiz da SPA, ponto de montagem do React |
 | `frontend/.env.example` | Modelo de variável de ambiente do frontend (`VITE_API_URL`, URL base da API) |
 | `frontend/.dockerignore` | Evita copiar `node_modules/`, `dist/` etc. para dentro da imagem |
