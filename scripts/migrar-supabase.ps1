@@ -77,6 +77,21 @@ if ($url -match ':6543/') {
     exit 1
 }
 
+# O projeto Supabase foi recriado em 2026-09-17 (fodtdcdratwglkmbvnia ->
+# fcmmshbwedjqtgnqutsn). Uma maquina que participou da migracao antes disso
+# pode ter guardado a URL antiga, e rodar migracao contra um projeto
+# descartado nao da erro obvio. Se o projeto mudar de novo, atualize a
+# constante abaixo (o ref nao e segredo -- ele ja esta no .mcp.json).
+$refEsperado = "fcmmshbwedjqtgnqutsn"
+if ($url -notmatch [regex]::Escape($refEsperado)) {
+    Write-Host "ERRO: a URL nao aponta para o projeto Supabase atual ($refEsperado)." -ForegroundColor Red
+    Write-Host "Se este arquivo veio de outra maquina, ele pode ter a URL do projeto antigo,"
+    Write-Host "que foi descartado. Confira o host e o usuario no painel do Supabase,"
+    Write-Host "secao Connect. Se o projeto mudou de proposito, atualize a variavel"
+    Write-Host "`$refEsperado no topo deste script."
+    exit 1
+}
+
 # Mascara a senha em qualquer saida (mensagem de erro do driver, por ex.).
 $senha = $null
 if ($url -match '://[^:/@]+:([^@]+)@') { $senha = $Matches[1] }

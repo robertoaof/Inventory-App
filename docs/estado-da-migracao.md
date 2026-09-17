@@ -139,6 +139,40 @@ Os valores padrão servem para desenvolvimento local com Docker. Você só
 precisa editar se for rodar algo contra o Supabase — e nesse caso veja a
 seção 5.
 
+### 4.2b O arquivo `backend/.env.supabase` (só para rodar migração)
+
+`scripts/migrar-supabase.ps1` — que roda `alembic upgrade head` e o seed na
+ordem obrigatória — lê a URL de conexão deste arquivo, e **não** do `.env`.
+Ele existe para a senha do banco não passar por linha de comando nem por
+chat. Está coberto pelo `.gitignore` (padrão `.env.*`), então **nunca vem
+no `git clone` nem no `git pull`**.
+
+Conteúdo: uma linha só, com o **session pooler (porta 5432)**:
+
+```
+DATABASE_URL=postgresql+psycopg://postgres.fcmmshbwedjqtgnqutsn:SENHA@aws-0-sa-east-1.pooler.supabase.com:5432/postgres
+```
+
+Você só precisa dele se for mexer no schema a partir desta máquina. Para
+só rodar o sistema local com Docker, o `.env` basta.
+
+#### ⚠️ Se a máquina **já tiver** esse arquivo
+
+Um `git pull` não toca nele — arquivo ignorado não entra em conflito nem é
+sobrescrito. O risco é outro: se esta máquina participou da migração
+**antes de 2026-09-17**, o arquivo (ou o `DATABASE_URL` do `.env`) pode ter
+a URL do projeto Supabase **antigo**, `fodtdcdratwglkmbvnia`, que foi
+descartado. Rodar migração contra ele não dá erro óbvio — dá falha de
+autenticação sem explicação, ou pior, sucesso no projeto errado.
+
+O script protege contra isso: ele recusa qualquer URL que não aponte para
+o projeto atual (`fcmmshbwedjqtgnqutsn`) e diz o que fazer. Se o projeto
+mudar de novo um dia, atualize a variável `$refEsperado` no topo do
+script — o *ref* não é segredo, ele já está no `.mcp.json`.
+
+Mesmo cuidado vale para o `.env` da raiz: ele deve apontar para o Postgres
+do Docker (`@db:5432`), não para o Supabase. Ver a nota no fim da seção 5.
+
 ### 4.3 Ambiente Python (opcional, mas recomendado)
 
 Só é necessário se você for rodar migrações do Alembic a partir da máquina.
@@ -228,6 +262,14 @@ real, custa 2 minutos e é o caminho mais rápido).
 Como a senha do projeto anterior passou pelo chat durante a depuração,
 recriar o projeto (feito em 2026-09-17) resolveu isso — a migração roda de
 novo em segundos.
+
+### Onde guardar a URL nesta máquina
+
+A partir de 2026-09-17 o lugar certo é **`backend/.env.supabase`** (seção
+4.2b), não o `.env` da raiz. Motivo: o `.env` é o arquivo que o
+`docker compose` lê, então deixar a URL do Supabase ali faz o ambiente
+local inteiro — inclusive o serviço `migrate` — apontar para o banco de
+produção sem ninguém perceber.
 
 ### Disjuntor do pooler
 

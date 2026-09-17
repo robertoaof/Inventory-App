@@ -289,8 +289,10 @@ Supabase em 2026-09-17 (ver `docs/estado-da-migracao.md`, seção 5).
    ```
 
 O script recusa a execução se a URL vier com `postgresql://` em vez de
-`postgresql+psycopg://`, ou com a porta `6543` (essa é a da Vercel, não a
-da migração), e **não roda o seed se a migração falhar**. Qualquer saída —
+`postgresql+psycopg://`, com a porta `6543` (essa é a da Vercel, não a da
+migração), ou apontando para um projeto Supabase diferente do atual —
+proteção contra uma máquina que ainda guarde a URL do projeto antigo,
+descartado em 2026-09-17. E **não roda o seed se a migração falhar**. Qualquer saída —
 inclusive stack trace do driver — sai com a senha trocada por `***`.
 
 Para uma migração futura num banco que já tem o catálogo populado

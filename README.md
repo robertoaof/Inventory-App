@@ -38,7 +38,7 @@ Compose para desenvolvimento e produção (VPS). Detalhes de arquitetura em
 | `docker-compose.override.yml` | Sobrescreve a base **automaticamente** em desenvolvimento (Compose carrega os dois por padrão): hot-reload do backend (`--reload`, volume montado), Vite dev server do frontend na porta 5173 |
 | `docker-compose.prod.yml` | Ajustes exclusivos de produção, carregados só sob pedido explícito (`-f docker-compose.yml -f docker-compose.prod.yml`): `restart: unless-stopped`, 5 workers do Uvicorn, HTTPS via Caddy (portas 80/443, volumes de certificado), serviço `backup` (dump diário do Postgres) |
 | `scripts/backup-postgres.sh` | Script `sh` rodado pelo serviço `backup`: `pg_dump` + `gzip`, aplica retenção de 7 dias, comentário com o comando de restauração |
-| `scripts/migrar-supabase.ps1` | Roda `alembic upgrade head` e depois `python -m app.seed_items` contra o Supabase, nessa ordem. Lê a URL de conexão de `backend/.env.supabase` (fora do git) para a senha não passar pela linha de comando; mascara a senha em toda a saída, recusa URL com porta 6543 ou sem `+psycopg`, e não roda o seed se a migração falhar. `-SomenteMigracao` pula o seed |
+| `scripts/migrar-supabase.ps1` | Roda `alembic upgrade head` e depois `python -m app.seed_items` contra o Supabase, nessa ordem. Lê a URL de conexão de `backend/.env.supabase` (fora do git) para a senha não passar pela linha de comando; mascara a senha em toda a saída, recusa URL com porta 6543, sem `+psycopg` ou apontando para um projeto Supabase que não seja o atual, e não roda o seed se a migração falhar. `-SomenteMigracao` pula o seed |
 
 ## `.claude/` — configuração do Claude Code neste repositório
 
