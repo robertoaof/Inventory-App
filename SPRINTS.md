@@ -842,6 +842,68 @@ seguro uma pessoa/uma sessão só levar do início ao fim.
 
 ---
 
+## Sprint 8 — Deploy em produção: Vercel + Supabase (Opção A)
+
+> Formalizado em 2026-09-17 a partir do trabalho já registrado no log de
+> decisões e em `docs/estado-da-migracao.md`. Este é o **primeiro deploy de
+> produção do projeto** — não existe ambiente anterior a substituir, então
+> não há cutover clássico nem convivência entre dois ambientes (ver
+> correção de premissa registrada em 2026-09-16).
+
+**Já feito antes deste sprint ser aberto** (não repetir):
+- Código adaptado para modo serverless (`backend/app/database.py`,
+  `DB_MODO_SERVERLESS`), `frontend/vercel.json` criado, `.env.example`
+  documentado (commit `8648fe9`).
+
+**Feito durante este sprint:**
+- [x] Trocar a senha do banco Supabase — resolvido recriando o projeto do
+      zero (`fodtdcdratwglkmbvnia` → **`fcmmshbwedjqtgnqutsn`**), já que a
+      senha antiga tinha passado pelo chat durante a depuração registrada em
+      `docs/estado-da-migracao.md` seção 5. `.mcp.json` atualizado para
+      apontar para o projeto novo. **Consequência: o schema e o seed do
+      projeto antigo não existem no projeto novo** — confirmado via MCP
+      (`list_tables` e `list_migrations` retornam vazio) → 2026-09-17.
+
+**Tarefas restantes** (`docs/deploy-vercel-supabase.md` seções 2.5, 4A e 5,
+`docs/estado-da-migracao.md` seção 3):
+
+- [ ] Rodar `alembic upgrade head` + `python -m app.seed_items` contra o
+      projeto Supabase novo (`fcmmshbwedjqtgnqutsn`) — o banco está vazio,
+      isso ainda não foi feito neste projeto (seção 2.5 do roteiro; **ordem
+      não é negociável**, migração antes do seed)
+- [ ] Criar a conta/time Pro na Vercel (obrigatório para uso comercial —
+      seção 0.4/6)
+- [ ] Criar o projeto da API na Vercel (Root Directory = `backend`),
+      configurar `DATABASE_URL` (transaction pooler, porta 6543),
+      `DB_MODO_SERVERLESS=1` e `CORS_ORIGINS` provisório — seção 4A.2
+- [ ] Apontar a função da API para a região `gru1` (São Paulo) e redeploy —
+      seção 4A.3
+- [ ] Testar `/api/v1/health` e `/api/v1/inventarios/{data}` na API
+      publicada — seção 4A.4
+- [ ] Criar o projeto do frontend na Vercel (Root Directory = `frontend`),
+      configurar `VITE_API_URL` com a URL final da API — seção 5.3
+- [ ] Fechar o ciclo de CORS: atualizar `CORS_ORIGINS` da API com a URL
+      final do frontend e redeploy — seção 5.5
+- [ ] Rodar o checklist de verificação de ponta a ponta completo (12 itens,
+      seção 6 do roteiro — inclui repetir autosave/importação de XML
+      várias vezes seguidas para validar o ajuste do transaction pooler)
+- [ ] Só depois do checklist passar: atualizar a documentação conforme
+      seção 13 do roteiro (`README.md`, mover `docs/preparativos-vps.md` e
+      `docs/docker-compose.md` para `docs/arquivo/`, corrigir limite de
+      upload em `docs/document-rest-API.md` para 4,5 MB, atualizar
+      `CLAUDE.md`)
+
+**Dependências:** Sprint 7 (Docker) concluído — o ambiente local continua
+sendo a referência de comportamento; nada deste sprint muda regras de
+negócio, só onde o sistema roda.
+
+**Fora de escopo deste sprint** (não fazer sem pedido explícito): remover
+`docker-compose*.yml`/Dockerfiles/Caddyfile/script de backup do
+repositório — eles continuam servindo para desenvolvimento local e como
+caminho de volta para VPS; a seção 13 já recomenda mantê-los.
+
+---
+
 ## Log de decisões tomadas durante a implementação
 
 > Preencha aqui sempre que uma tarefa exigir uma decisão que não estava
@@ -1145,3 +1207,11 @@ seguro uma pessoa/uma sessão só levar do início ao fim.
   custos passa a comparar dois caminhos igualmente novos (Vercel ~US$ 20/mês
   vs. VPS ~R$ 30–50/mês + administração) em vez de tratar a VPS como custo já
   pago → 2026-09-16.
+- [Sprint 8] Projeto Supabase recriado do zero (`fodtdcdratwglkmbvnia` →
+  `fcmmshbwedjqtgnqutsn`) para trocar a senha do banco, já que a anterior
+  havia passado pelo chat durante a depuração de conexão registrada em
+  `docs/estado-da-migracao.md` seção 5. `.mcp.json` já aponta para o
+  projeto novo. Confirmado via MCP que o projeto novo está vazio (sem
+  tabelas, sem migrações aplicadas) — `alembic upgrade head` e
+  `seed_items` precisam rodar de novo antes de qualquer outro passo do
+  Sprint 8 → 2026-09-17.

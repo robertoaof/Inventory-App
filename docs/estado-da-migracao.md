@@ -18,7 +18,7 @@ Documentos relacionados:
 | Decisão | Valor | Quando |
 |---|---|---|
 | Opção de hospedagem | **Opção A** — frontend e backend FastAPI ambos na Vercel, banco no Supabase | 2026-09-16 |
-| Projeto Supabase | `fodtdcdratwglkmbvnia`, região **São Paulo** (`sa-east-1`), plano **Free** | 2026-09-16 |
+| Projeto Supabase | `fcmmshbwedjqtgnqutsn`, região **São Paulo** (`sa-east-1`), plano **Free** — projeto recriado do zero em 2026-09-17 (o anterior, `fodtdcdratwglkmbvnia`, foi descartado porque a senha havia passado pelo chat; ver seção 5) | 2026-09-17 |
 | Região da função Vercel | `gru1` (São Paulo), para ficar junto do banco | a aplicar |
 | Tamanho dos XMLs | Abaixo de 1 MB — o teto de 4,5 MB da Vercel não é problema prático | confirmado |
 
@@ -44,42 +44,47 @@ Commit `8648fe9` — *Prepara o codigo para deploy serverless na Vercel + Supaba
 
 Commit `be6b869` — o roteiro `docs/deploy-vercel-supabase.md`.
 
-### 2.2 Banco de dados Supabase — **pronto e verificado**
+### 2.2 Banco de dados Supabase — **projeto recriado, schema ainda por aplicar**
 
-O schema foi criado e o catálogo populado em 2026-09-16. Verificado via
-MCP, com estes resultados:
+O projeto original (`fodtdcdratwglkmbvnia`) chegou a ter o schema criado e o
+catálogo populado em 2026-09-16, mas foi **descartado** em 2026-09-17 porque
+a senha do banco havia passado pelo chat durante a depuração da seção 5. Um
+projeto novo (`fcmmshbwedjqtgnqutsn`) foi criado no lugar, e o `.mcp.json`
+já foi atualizado para apontar para ele.
+
+**O projeto novo está vazio.** Confirmado via MCP em 2026-09-17:
 
 | Verificação | Resultado |
 |---|---|
-| Tabelas | `itens`, `inventarios`, `inventario_itens`, `importacoes_xml`, `alembic_version` |
-| Catálogo fixo | 11 itens — 9 óleos + 2 graxas |
-| Versão do Alembic | `0001_initial` |
-| Colunas geradas | `diferenca=ALWAYS`, `status=ALWAYS` ✅ |
+| Tabelas (`list_tables`) | nenhuma |
+| Migrações (`list_migrations`) | nenhuma |
 
-**Não é preciso rodar a migração de novo.** Ela já está aplicada no banco
-remoto, e o Alembic sabe disso (`alembic_version = 0001_initial`).
+**A migração e o seed precisam rodar de novo** contra o projeto novo —
+seção 2.5 de `docs/deploy-vercel-supabase.md` (`alembic upgrade head`
+**antes** de `python -m app.seed_items`, nessa ordem, por causa das
+colunas `GENERATED ALWAYS AS`).
 
 ### 2.3 Ferramental
 
-- `.mcp.json` na raiz registra o servidor MCP do Supabase. Na máquina nova
-  ele vai pedir aprovação na primeira sessão e depois autenticação OAuth.
+- `.mcp.json` na raiz registra o servidor MCP do Supabase, já apontando
+  para o projeto novo (`fcmmshbwedjqtgnqutsn`). Na máquina nova ele vai
+  pedir aprovação na primeira sessão e depois autenticação OAuth.
 
 ---
 
 ## 3. O que falta fazer
 
-Nada disso foi iniciado ainda:
-
+- [ ] Rodar `alembic upgrade head` + `python -m app.seed_items` contra o
+      projeto Supabase novo (`fcmmshbwedjqtgnqutsn`) — ver seção 2.2 acima
 - [ ] Criar a conta/time na Vercel (ver seção 6 sobre o plano Pro)
 - [ ] Criar o **projeto da API** na Vercel (Root Directory = `backend`)
 - [ ] Apontar a função para a região `gru1`
 - [ ] Criar o **projeto do frontend** na Vercel (Root Directory = `frontend`)
 - [ ] Configurar `VITE_API_URL` no frontend e `CORS_ORIGINS` no backend
 - [ ] Rodar o checklist de verificação de ponta a ponta (seção 6 do roteiro)
-- [ ] Trocar a senha do banco (ver seção 5)
 
 O passo a passo detalhado de cada um está em
-`docs/deploy-vercel-supabase.md`, seções 4A e 5.
+`docs/deploy-vercel-supabase.md`, seções 2.5, 4A e 5.
 
 ---
 
@@ -145,24 +150,35 @@ um repositório público.
 O que você precisa levar para a máquina nova, por um meio seguro
 (gerenciador de senhas, não e-mail nem chat):
 
-- A senha do papel `postgres` do projeto Supabase `fodtdcdratwglkmbvnia`.
-  É a senha **definida na criação do projeto** — ver o aviso abaixo.
+- A senha do papel `postgres` do projeto Supabase **novo**,
+  `fcmmshbwedjqtgnqutsn`. É a senha **definida na criação deste projeto**
+  (o projeto anterior, `fodtdcdratwglkmbvnia`, foi descartado — ver o aviso
+  abaixo — e sua senha não vale mais para nada).
 
-Com ela, as duas strings de conexão se montam assim:
+Com ela, as duas strings de conexão se montam assim (confirme o host exato
+no painel do projeto novo, seção **Connect** — o número após `aws-` pode
+mudar de projeto para projeto):
 
 ```
 # Session pooler (porta 5432) — migrações do Alembic a partir da sua máquina
-postgresql+psycopg://postgres.fodtdcdratwglkmbvnia:SENHA@aws-0-sa-east-1.pooler.supabase.com:5432/postgres
+postgresql+psycopg://postgres.fcmmshbwedjqtgnqutsn:SENHA@aws-0-sa-east-1.pooler.supabase.com:5432/postgres
 
 # Transaction pooler (porta 6543) — é esta que vai na Vercel
-postgresql+psycopg://postgres.fodtdcdratwglkmbvnia:SENHA@aws-0-sa-east-1.pooler.supabase.com:6543/postgres
+postgresql+psycopg://postgres.fcmmshbwedjqtgnqutsn:SENHA@aws-0-sa-east-1.pooler.supabase.com:6543/postgres
 ```
 
 Host e usuário estão confirmados como corretos por teste direto. O prefixo
 `postgresql+psycopg://` (em vez do `postgresql://` que o painel mostra) é
 obrigatório — é o que diz ao SQLAlchemy qual driver usar.
 
-### ⚠️ O botão "Reset database password" não funciona neste projeto
+### ⚠️ O botão "Reset database password" não funcionava no projeto anterior
+
+> **Atualização 2026-09-17:** o problema abaixo era do projeto
+> `fodtdcdratwglkmbvnia`, que foi descartado. O projeto atual
+> (`fcmmshbwedjqtgnqutsn`) nasceu já com a senha nova e nunca teve essa
+> senha exposta em chat — não há necessidade de repetir a troca nele.
+> Fica registrado abaixo como referência, caso o mesmo sintoma apareça de
+> novo em outro projeto.
 
 Isso custou seis tentativas de conexão e vale registrar em detalhe, para
 ninguém repetir:
@@ -182,9 +198,9 @@ como trocá-la pela interface.** Para trocar, as opções são abrir um ticket
 no Supabase ou recriar o projeto do zero (o que, enquanto não houver dado
 real, custa 2 minutos e é o caminho mais rápido).
 
-Como a senha atual passou pelo chat durante a depuração, **trocá-la antes
-do cutover é recomendável** — recriar o projeto e rodar a migração de novo
-resolve, e a migração leva segundos.
+Como a senha do projeto anterior passou pelo chat durante a depuração,
+recriar o projeto (feito em 2026-09-17) resolveu isso — a migração roda de
+novo em segundos.
 
 ### Disjuntor do pooler
 
@@ -195,7 +211,7 @@ minutos. Se aparecer, **pare de tentar** — insistir prolonga o bloqueio.
 
 ### Conexão direta não funciona nesta rede
 
-O host `db.fodtdcdratwglkmbvnia.supabase.co` (Direct connection) é
+O host `db.<project-ref>.supabase.co` (Direct connection) é
 **IPv6-only** e o DNS nem resolve em rede sem IPv6 — foi o caso da máquina
 original. Use sempre o pooler (`aws-0-sa-east-1.pooler.supabase.com`).
 
@@ -250,19 +266,22 @@ O `CLAUDE.md` já é carregado automaticamente. Na primeira sessão, o
 depois autorize via OAuth no navegador. Com o MCP conectado, dá para
 inspecionar o banco sem precisar da senha.
 
-Tenha a senha do banco em mãos antes de começar, se for rodar migrações.
+Tenha a senha do banco novo (`fcmmshbwedjqtgnqutsn`) em mãos antes de
+começar, se for rodar migrações — a próxima ação pendente é justamente
+`alembic upgrade head` + `python -m app.seed_items` contra ele (seção 2.2).
 
 ---
 
-## 8. Histórico resumido da sessão de 2026-09-16
+## 8. Histórico resumido
 
-Para contexto de quem retomar:
+### Sessão de 2026-09-16
 
 1. Escrito o roteiro `docs/deploy-vercel-supabase.md` cobrindo as três
    opções de hospedagem (commit `be6b869`).
 2. Escolhida a Opção A e aplicadas as três mudanças de código que ela
    exige (commit `8648fe9`).
-3. Criado o projeto no Supabase e registrado o servidor MCP.
+3. Criado o projeto no Supabase (`fodtdcdratwglkmbvnia`) e registrado o
+   servidor MCP.
 4. Seis tentativas de conectar ao banco falharam por autenticação. A
    investigação descartou, por teste direto, que fosse host, usuário,
    porta, rede, IPv6 ou integridade do projeto — o tenant era encontrado
@@ -270,6 +289,16 @@ Para contexto de quem retomar:
    senha do painel não estavam sendo aplicados, e a senha válida era a
    original da criação do projeto.
 5. Migração e seed aplicados com sucesso e verificados via MCP.
+
+### Sessão de 2026-09-17
+
+1. Como a senha do projeto `fodtdcdratwglkmbvnia` havia passado pelo chat
+   durante a depuração acima, o projeto foi **descartado e recriado do
+   zero** como `fcmmshbwedjqtgnqutsn` (mesma região, São Paulo).
+2. `.mcp.json` atualizado para apontar para o projeto novo.
+3. Confirmado via MCP (`list_tables`, `list_migrations`) que o projeto
+   novo está vazio — schema e seed ainda não foram aplicados nele. Essa é
+   a próxima ação pendente, registrada no Sprint 8 de `SPRINTS.md`.
 
 O que **não** foi feito: nada na Vercel. A conta foi criada, mas nenhum
 projeto foi importado ainda.
