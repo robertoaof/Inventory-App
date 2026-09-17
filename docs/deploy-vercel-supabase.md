@@ -81,6 +81,16 @@ preço.
 
 ### 0.4 ⚠️ Uso comercial: o plano grátis da Vercel não serve
 
+> **Atualização 2026-09-17 — esta seção deixou de valer para o uso atual.**
+> A pessoa decidiu que **o sistema fica como portfólio pessoal**: ninguém
+> mais vai usar, não é o sistema de trabalho da concessionária. Nesse
+> cenário o **Hobby serve**, porque a restrição do contrato é a uso
+> comercial, e o projeto seguiu nele (ver `SPRINTS.md`, Sprint 8).
+> O texto abaixo continua válido e vira o gatilho para reavaliar: **se um
+> dia a empresa passar a usar o sistema de verdade no dia a dia, o upgrade
+> para Pro deixa de ser opcional.** Consequência já sentida por estar no
+> Hobby: a região da função não sai de `iad1` (ver seção 4A.3).
+
 O plano **Hobby** da Vercel é gratuito, mas a política de uso justo da
 própria Vercel diz, com todas as letras, que ele é restrito a **uso
 pessoal e não comercial**. Um sistema de inventário usado por uma
@@ -257,6 +267,34 @@ ordem exata**:
 > é feito no frontend (RN01–RN03), simplesmente para de funcionar. Esse é
 > exatamente o motivo pelo qual o `docker-compose.yml` tem um serviço
 > `migrate` separado rodando os dois na ordem.
+
+#### Jeito 0 — pelo script `scripts/migrar-supabase.ps1` (recomendado)
+
+O script roda os dois comandos na ordem certa e, principalmente, **evita
+que a senha do banco passe pela linha de comando ou por uma conversa de
+chat** — que foi exatamente o problema que obrigou a recriar o projeto do
+Supabase em 2026-09-17 (ver `docs/estado-da-migracao.md`, seção 5).
+
+1. Crie `backend/.env.supabase` (ignorado pelo git) com uma linha só,
+   usando o **session pooler, porta 5432**:
+
+   ```
+   DATABASE_URL=postgresql+psycopg://postgres.<ref>:<SENHA>@aws-0-sa-east-1.pooler.supabase.com:5432/postgres
+   ```
+
+2. Rode, da raiz do repositório:
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File scripts/migrar-supabase.ps1
+   ```
+
+O script recusa a execução se a URL vier com `postgresql://` em vez de
+`postgresql+psycopg://`, ou com a porta `6543` (essa é a da Vercel, não a
+da migração), e **não roda o seed se a migração falhar**. Qualquer saída —
+inclusive stack trace do driver — sai com a senha trocada por `***`.
+
+Para uma migração futura num banco que já tem o catálogo populado
+(seção 8.2), acrescente `-SomenteMigracao` e o seed é pulado.
 
 #### Jeito 1 — com Docker (recomendado, você já tem tudo instalado)
 
@@ -447,6 +485,16 @@ banco atravessa o continente duas vezes.
 Em **Settings → Functions → Function Region**, escolha **`gru1` (São
 Paulo)**. Depois redeploy (Deployments → o último → menu `…` →
 **Redeploy**).
+
+> ⚠️ **No plano Hobby isso não pega (testado em 2026-09-17).** A caixa do
+> `gru1` marca e o Save não reclama, mas ao recarregar a página a região
+> volta para `iad1`. Tentado três vezes, inclusive desmarcando o `iad1`
+> antes — o painel avisa "Regions for Hobby projects are limited to 1",
+> mas na prática a escolha não persiste. **Custo medido:** cada
+> `GET /inventarios/{data}` na API publicada leva ~1,5 s, que é a ida e
+> volta Virgínia ↔ São Paulo a cada consulta. Se o projeto for para o Pro,
+> refazer este passo; se continuar travado, testar `"regions": ["gru1"]`
+> num `backend/vercel.json`.
 
 ### 4A.4 Testar
 

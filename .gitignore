@@ -12,6 +12,8 @@ build/
 
 # Env
 .env
+.env.*
+!.env.example
 
 # Editor/OS
 .vscode/

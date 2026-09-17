@@ -867,26 +867,91 @@ seguro uma pessoa/uma sessão só levar do início ao fim.
 **Tarefas restantes** (`docs/deploy-vercel-supabase.md` seções 2.5, 4A e 5,
 `docs/estado-da-migracao.md` seção 3):
 
-- [ ] Rodar `alembic upgrade head` + `python -m app.seed_items` contra o
-      projeto Supabase novo (`fcmmshbwedjqtgnqutsn`) — o banco está vazio,
-      isso ainda não foi feito neste projeto (seção 2.5 do roteiro; **ordem
-      não é negociável**, migração antes do seed)
-- [ ] Criar a conta/time Pro na Vercel (obrigatório para uso comercial —
-      seção 0.4/6)
-- [ ] Criar o projeto da API na Vercel (Root Directory = `backend`),
+- [x] Rodar `alembic upgrade head` + `python -m app.seed_items` contra o
+      projeto Supabase novo (`fcmmshbwedjqtgnqutsn`) — seção 2.5 do
+      roteiro; **ordem não é negociável**, migração antes do seed.
+      **Feito em 2026-09-17** via `scripts/migrar-supabase.ps1` (criado
+      nesta tarefa, lê a URL de um arquivo fora do git para a senha não
+      passar por chat). Verificado via MCP do Supabase:
+      - 4 tabelas + `alembic_version` em `0001_initial`;
+      - `itens` com **11 linhas** (9 óleos + 2 graxas);
+      - `inventario_itens.diferenca` e `.status` como `GENERATED ALWAYS`,
+        com as expressões corretas (RN01–RN03 preservadas);
+      - `GET /inventarios/2026-09-17` rodando contra o Supabase com
+        `DB_MODO_SERVERLESS=1` devolve `nao_iniciado` com 11 óleos e **zero
+        escrita** no banco (regra 5 do `CLAUDE.md` confirmada em nuvem);
+      - RLS vem ligada por padrão do Supabase nas 5 tabelas, sem políticas.
+        A API PostgREST/anon fica fechada e o backend não é afetado porque
+        conecta como `postgres`, dono das tabelas (RLS não se aplica ao
+        dono sem `FORCE`). Nada a fazer — ver nota no log de decisões.
+- [x] ~~Criar a conta/time Pro na Vercel~~ → **conta criada no plano
+      Hobby e o Pro foi dispensado**, decidido em 2026-09-17: o sistema
+      fica como **portfólio pessoal**, sem outras pessoas usando, e a
+      restrição do contrato da Vercel é a uso comercial. Time
+      `roberto-6e22`. **Gatilho para reabrir:** se a concessionária passar
+      a usar o sistema no dia a dia, o Pro volta a ser obrigatório (seção
+      0.4 do roteiro). Custo aceito de ficar no Hobby: a região fica presa
+      em `iad1` — ver tarefa abaixo.
+- [x] Criar o projeto da API na Vercel (Root Directory = `backend`),
       configurar `DATABASE_URL` (transaction pooler, porta 6543),
-      `DB_MODO_SERVERLESS=1` e `CORS_ORIGINS` provisório — seção 4A.2
+      `DB_MODO_SERVERLESS=1` e `CORS_ORIGINS` provisório — seção 4A.2.
+      **Feito em 2026-09-17:** projeto `inventario-scania-api`, preset
+      FastAPI detectado sozinho, URL de produção
+      `https://inventario-scania-api.vercel.app`. A senha do banco foi
+      colada no formulário pela área de transferência (PowerShell
+      `Set-Clipboard` + Ctrl+V), sem passar por chat nem por linha de
+      comando; a área de transferência foi limpa em seguida.
 - [ ] Apontar a função da API para a região `gru1` (São Paulo) e redeploy —
-      seção 4A.3
-- [ ] Testar `/api/v1/health` e `/api/v1/inventarios/{data}` na API
-      publicada — seção 4A.4
-- [ ] Criar o projeto do frontend na Vercel (Root Directory = `frontend`),
-      configurar `VITE_API_URL` com a URL final da API — seção 5.3
-- [ ] Fechar o ciclo de CORS: atualizar `CORS_ORIGINS` da API com a URL
-      final do frontend e redeploy — seção 5.5
-- [ ] Rodar o checklist de verificação de ponta a ponta completo (12 itens,
+      seção 4A.3. **Tentado e não aplicado em 2026-09-17.** Em
+      Settings → Functions → Function Region a caixa `gru1` marca, mas o
+      Save não persiste: depois de recarregar a página a região volta para
+      `iad1` (Washington). Testado três vezes, inclusive desmarcando
+      `iad1` antes (o painel avisa "Regions for Hobby projects are limited
+      to 1"). **Hipótese:** a escolha de região é recurso de plano pago e o
+      Hobby fica preso em `iad1`, apesar da mensagem sugerir o contrário.
+      Consequência medida: `GET /inventarios/{data}` na API publicada leva
+      **~1,5 s** por chamada, consistente com a ida e volta
+      Virgínia ↔ São Paulo a cada consulta. Reavaliar depois do upgrade
+      para Pro; se continuar travado, testar `"regions": ["gru1"]` num
+      `backend/vercel.json`.
+- [x] Testar `/api/v1/health` e `/api/v1/inventarios/{data}` na API
+      publicada — seção 4A.4. **Feito em 2026-09-17:** `/health` devolve
+      `{"status":"ok"}`; `/inventarios/2026-09-17` devolve
+      `nao_iniciado` com os 11 óleos/graxas vindos do Supabase pelo
+      transaction pooler. **10 chamadas seguidas, 10 respostas HTTP 200**
+      com os mesmos 11 itens e nenhum erro de prepared statement — o
+      ponto de risco levantado na seção 3 do roteiro não se materializou
+      (tempo estável em ~1,5 s, ver tarefa da região acima).
+- [x] Criar o projeto do frontend na Vercel (Root Directory = `frontend`),
+      configurar `VITE_API_URL` com a URL final da API — seção 5.3.
+      **Feito em 2026-09-17:** projeto `inventario-scania-web`, preset Vite
+      detectado sozinho, URL `https://inventario-scania-web.vercel.app`.
+- [x] Fechar o ciclo de CORS: atualizar `CORS_ORIGINS` da API com a URL
+      final do frontend e redeploy — seção 5.5. **Feito em 2026-09-17:**
+      valor passou a ser
+      `https://inventario-scania-web.vercel.app,http://localhost:5173`
+      (o localhost fica para poder rodar o frontend local contra a API
+      publicada). Verificado por header: origem do frontend e origem local
+      recebem `Access-Control-Allow-Origin`; uma origem qualquer **não**
+      recebe.
+- [~] Rodar o checklist de verificação de ponta a ponta completo (12 itens,
       seção 6 do roteiro — inclui repetir autosave/importação de XML
-      várias vezes seguidas para validar o ajuste do transaction pooler)
+      várias vezes seguidas para validar o ajuste do transaction pooler).
+      **Parcial em 2026-09-17** — o caminho principal foi verificado no
+      ambiente publicado:
+      - tela de Contagem carrega os 11 óleos/graxas vindos do Supabase;
+      - autosave grava (4 edições seguidas, todas salvas, "Rascunho salvo
+        às HH:MM"), e a diferença/status vêm calculados do backend
+        (físico 15 → `sobra`, diferença 15 — RN01–RN03 valendo em nuvem);
+      - persistência conferida pela API e **dados de teste zerados depois**
+        (o dia 2026-09-17 ficou como rascunho vazio, que por RN25 não
+        aparece no Histórico).
+      **Falta:** importação de XML repetida, fechar dia, Nova contagem e
+      Histórico no ambiente publicado.
+      **Observação para investigar (não é do deploy):** os três chips de
+      resumo (Falta/Sobra/Correto) não acompanham o autosave — continuam
+      com o valor antigo até recarregar a página, embora o card do item
+      atualize na hora.
 - [ ] Só depois do checklist passar: atualizar a documentação conforme
       seção 13 do roteiro (`README.md`, mover `docs/preparativos-vps.md` e
       `docs/docker-compose.md` para `docs/arquivo/`, corrigir limite de
@@ -1215,3 +1280,26 @@ caminho de volta para VPS; a seção 13 já recomenda mantê-los.
   tabelas, sem migrações aplicadas) — `alembic upgrade head` e
   `seed_items` precisam rodar de novo antes de qualquer outro passo do
   Sprint 8 → 2026-09-17.
+- [Sprint 8] Como rodar a migração contra o Supabase sem a senha passar por
+  chat nem pela linha de comando → criado `scripts/migrar-supabase.ps1`, que
+  lê a URL de `backend/.env.supabase` (arquivo local, coberto pelo novo
+  padrão `.env.*` do `.gitignore`), roda `alembic upgrade head` e só então
+  `python -m app.seed_items`, aborta o seed se a migração falhar, recusa URL
+  de transaction pooler (6543) ou sem o prefixo `+psycopg`, e mascara a senha
+  em toda a saída — inclusive em stack trace do driver (verificado com
+  credencial falsa). Motivo: foi justamente uma senha exposta em chat que
+  obrigou a recriar o projeto do Supabase → 2026-09-17.
+- [Sprint 8] RLS ligada automaticamente pelo Supabase nas tabelas do
+  `public`, sem políticas → **deixar como está**. O backend conecta como
+  `postgres` (dono das tabelas) e o Postgres não aplica RLS ao dono a menos
+  que a tabela use `FORCE ROW LEVEL SECURITY`, então o sistema funciona
+  normalmente; e sem políticas a API REST automática do Supabase fica
+  fechada para a chave anônima, que é o que se quer já que este projeto não
+  usa PostgREST — todo acesso passa pelo FastAPI → 2026-09-17.
+- [Sprint 8] Plano da Vercel: Pro ou Hobby? → **Hobby**, porque a pessoa
+  decidiu que o sistema fica como portfólio pessoal — ninguém mais vai
+  usar e ele não é o sistema de trabalho da concessionária, então a
+  restrição de uso comercial do contrato não se aplica. Reabrir se a
+  empresa passar a usar de verdade. Consequência aceita: a região da
+  função fica presa em `iad1` e cada consulta ao banco custa ~1,5 s
+  → 2026-09-17.

@@ -44,7 +44,7 @@ Commit `8648fe9` — *Prepara o codigo para deploy serverless na Vercel + Supaba
 
 Commit `be6b869` — o roteiro `docs/deploy-vercel-supabase.md`.
 
-### 2.2 Banco de dados Supabase — **projeto recriado, schema ainda por aplicar**
+### 2.2 Banco de dados Supabase — **schema aplicado e catálogo populado**
 
 O projeto original (`fodtdcdratwglkmbvnia`) chegou a ter o schema criado e o
 catálogo populado em 2026-09-16, mas foi **descartado** em 2026-09-17 porque
@@ -52,17 +52,35 @@ a senha do banco havia passado pelo chat durante a depuração da seção 5. Um
 projeto novo (`fcmmshbwedjqtgnqutsn`) foi criado no lugar, e o `.mcp.json`
 já foi atualizado para apontar para ele.
 
-**O projeto novo está vazio.** Confirmado via MCP em 2026-09-17:
+O projeto novo nasceu vazio, e **a migração e o seed foram rodados nele em
+2026-09-17**, via `scripts/migrar-supabase.ps1` (session pooler, porta
+5432). Estado confirmado via MCP do Supabase:
 
 | Verificação | Resultado |
 |---|---|
-| Tabelas (`list_tables`) | nenhuma |
-| Migrações (`list_migrations`) | nenhuma |
+| Tabelas | `itens`, `inventarios`, `inventario_itens`, `importacoes_xml` + `alembic_version` |
+| `alembic_version` | `0001_initial` |
+| Catálogo (`itens`) | 11 linhas — 9 óleos + 2 graxas |
+| `inventario_itens.diferenca` / `.status` | `GENERATED ALWAYS`, expressões corretas (RN01–RN03) |
+| `GET /inventarios/{data}` contra o Supabase | `nao_iniciado` com 11 óleos, zero escrita no banco |
+| RLS | ligada pelo Supabase nas 5 tabelas, sem políticas — ver nota abaixo |
 
-**A migração e o seed precisam rodar de novo** contra o projeto novo —
-seção 2.5 de `docs/deploy-vercel-supabase.md` (`alembic upgrade head`
-**antes** de `python -m app.seed_items`, nessa ordem, por causa das
-colunas `GENERATED ALWAYS AS`).
+> **Sobre a RLS:** o Supabase liga *row level security* por padrão em
+> tabelas novas do schema `public`. Sem políticas, isso fecha a API REST
+> automática (PostgREST) para a chave anônima — o que é desejável aqui,
+> já que este projeto não usa PostgREST: todo acesso passa pelo FastAPI.
+> O backend não é afetado porque conecta como `postgres`, dono das
+> tabelas, e o Postgres não aplica RLS ao dono a menos que a tabela use
+> `FORCE ROW LEVEL SECURITY`. **Não mexer.**
+
+> **`list_migrations` do MCP continua vazio, e isso está certo.** Ele lê a
+> tabela de migrações *do Supabase* (`supabase_migrations.schema_migrations`),
+> preenchida pelo CLI deles. Quem controla o schema aqui é o Alembic, que
+> usa a própria tabela `alembic_version` — a verificação válida é a linha
+> `0001_initial` dela, não a saída do `list_migrations`.
+
+Para uma migração futura (schema novo num banco que já tem catálogo), use
+`scripts/migrar-supabase.ps1 -SomenteMigracao` — seção 8.2 do roteiro.
 
 ### 2.3 Ferramental
 
@@ -74,8 +92,17 @@ colunas `GENERATED ALWAYS AS`).
 
 ## 3. O que falta fazer
 
-- [ ] Rodar `alembic upgrade head` + `python -m app.seed_items` contra o
-      projeto Supabase novo (`fcmmshbwedjqtgnqutsn`) — ver seção 2.2 acima
+> **Atualizado em 2026-09-17:** tudo desta lista foi feito, menos a região
+> `gru1` (travada pelo plano Hobby) e o upgrade para Pro (dispensado
+> enquanto o uso for portfólio pessoal — ver seção 6). O sistema está no ar:
+> API em `https://inventario-scania-api.vercel.app` e frontend em
+> `https://inventario-scania-web.vercel.app`, com CORS fechado entre os
+> dois e autosave gravando no Supabase. Detalhe de cada item no
+> `SPRINTS.md`, Sprint 8.
+
+- [x] ~~Rodar `alembic upgrade head` + `python -m app.seed_items` contra o
+      projeto Supabase novo (`fcmmshbwedjqtgnqutsn`)~~ — **feito em
+      2026-09-17**, ver seção 2.2 acima
 - [ ] Criar a conta/time na Vercel (ver seção 6 sobre o plano Pro)
 - [ ] Criar o **projeto da API** na Vercel (Root Directory = `backend`)
 - [ ] Apontar a função para a região `gru1`
@@ -217,7 +244,20 @@ original. Use sempre o pooler (`aws-0-sa-east-1.pooler.supabase.com`).
 
 ---
 
-## 6. ⚠️ Vercel: plano Pro é obrigatório
+## 6. ⚠️ Vercel: plano Pro era tido como obrigatório — revisto em 2026-09-17
+
+> **Decisão da pessoa em 2026-09-17:** o sistema fica como **portfólio
+> pessoal**, sem outras pessoas usando e sem virar o sistema de trabalho da
+> concessionária. Com isso o **Hobby atende** — a restrição do contrato da
+> Vercel é a uso comercial — e o deploy foi feito nele. O que está escrito
+> abaixo continua sendo o gatilho de reavaliação: **se a empresa passar a
+> usar o sistema de verdade, o Pro volta a ser obrigatório.**
+>
+> Efeito colateral aceito de ficar no Hobby: a região da função não sai de
+> `iad1` (Washington) — ver `docs/deploy-vercel-supabase.md` seção 4A.3 —
+> o que custa ~1,5 s por consulta ao banco.
+
+### O texto original (premissa de uso comercial)
 
 O plano Hobby da Vercel é restrito por contrato a **uso pessoal e não
 comercial**. Este é um sistema de empresa, então a conta precisa ser
